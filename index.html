@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Code Editor Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
+
+        :root {
+            --editor-bg: #0d1117;
+            --editor-text: #c9d1d9;
+            --keyboard-bg: #161b22;
+            --accent-blue: #1f6feb;
+            /* 初始值将由 JS initResponsiveConfig 覆盖 */
+            --font-size: 14px;
+            --btn-size: 22px;
+            --tab-size: 2;
+            
+            --hl-keyword: #ff7b72;
+            --hl-string: #a5d6ff;
+            --hl-comment: #8b949e;
+            --hl-type: #ffa657;
+            --hl-func: #d2a8ff;
+            --hl-tag: #7ee787;
+            --transition-speed: 0.2s;
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            background-color: var(--editor-bg);
+            transition: background-color var(--transition-speed);
+            color: var(--editor-text);
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .editor-container { display: flex; flex-direction: column; height: 100vh; }
+        .editor-wrapper { flex: 1; position: relative; overflow: hidden; }
+
+        #highlight-layer, #code-area {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; margin: 0; padding: 12px;
+            font-family: 'Fira Code', monospace;
+            font-size: var(--font-size);
+            line-height: 1.5;
+            tab-size: var(--tab-size);
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        #code-area {
+            background: transparent; color: transparent;
+            caret-color: var(--accent-blue); z-index: 2;
+            outline: none; -webkit-text-fill-color: transparent;
+        }
+
+        #highlight-layer { z-index: 1; color: var(--editor-text); pointer-events: none; }
+
+        .hl-keyword { color: var(--hl-keyword); font-weight: 500; }
+        .hl-string { color: var(--hl-string); }
+        .hl-comment { color: var(--hl-comment); font-style: italic; }
+        .hl-type { color: var(--hl-type); }
+        .hl-func { color: var(--hl-func); }
+        .hl-tag { color: var(--hl-tag); }
+
+        .accessory-bar {
+            background-color: var(--keyboard-bg);
+            border-top: 1px solid #30363d;
+            padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10;
+        }
+
+        .top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .top-row-btn {
+            height: calc(var(--btn-size) + 4px); padding: 0 12px; font-size: calc(var(--font-size) * 0.9);
+            background: #21262d; border: 1px solid #30363d;
+            border-radius: 4px; display: flex; align-items: center; color: #c9d1d9;
+        }
+
+        .symbol-grid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; }
+        .symbol-grid::after { content: ""; flex: auto; }
+        .symbol-btn {
+            width: var(--btn-size); height: var(--btn-size); font-size: calc(var(--font-size) * 0.9);
+            background: #21262d; border: 1px solid #30363d;
+            border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #c9d1d9;
+        }
+
+        .bot-layer { display: flex; flex-wrap: wrap; gap: 4px; }
+        .snippet-btn {
+            height: var(--btn-size);
+            padding: 0 10px; font-size: calc(var(--font-size) * 0.8);
+            background: #0d1117; border: 1px solid #30363d;
+            border-radius: 4px; color: #8b949e;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .key-active:active { background: #1f6feb !important; color: white !important; }
+
+        #settings-panel {
+            display: none; position: fixed; top: 45px; right: 10px;
+            width: 260px; background: #161b22; border: 1px solid #30363d;
+            border-radius: 8px; z-index: 100; padding: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+        }
+        .setting-item { margin-bottom: 15px; font-size: 13px; display: flex; align-items: center; color: #8b949e; }
+        .setting-item label { width: 45px; flex-shrink: 0; }
+        .setting-item-content { flex: 1; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+        
+        .font-num-input {
+            width: 45px; background: #0d1117; border: 1px solid #30363d;
+            color: #c9d1d9; border-radius: 4px; padding: 2px 4px; text-align: center;
+            font-size: 12px; outline: none;
+        }
+        input[type="range"] { flex: 1; accent-color: var(--accent-blue); }
+        
+        .tab-options { display: flex; gap: 4px; background: #0d1117; padding: 2px; border-radius: 4px; }
+        .tab-opt { padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+        .tab-opt.active { background: #21262d; color: white; }
+        select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px; font-size: 12px; width: 100%; }
+
+        @media (min-width: 1024px) {
+            .accessory-bar { padding: 15px; gap: 10px; }
+            .symbol-grid { gap: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="editor-container">
+    <header class="h-12 flex items-center justify-between px-4 bg-[#010409] border-b border-[#30363d]">
+        <div class="flex items-center gap-2">
+            <i data-lucide="code-2" class="text-blue-500 w-5 h-5"></i>
+            <span class="text-xs font-medium text-gray-400" id="lang-indicator">C</span>
+        </div>
+        <div class="flex items-center gap-5">
+            <button onclick="copyCode()" class="text-blue-500"><i data-lucide="copy" class="w-5 h-5"></i></button>
+            <button id="toggle-tools-btn" class="text-gray-400"><i data-lucide="layout-panel-top" class="w-5 h-5"></i></button>
+            <button id="settings-gear" class="text-gray-400"><i data-lucide="settings" class="w-5 h-5"></i></button>
+        </div>
+    </header>
+
+    <div id="settings-panel">
+        <div class="setting-item"><label>缩进</label>
+            <div class="setting-item-content">
+                <div class="tab-options">
+                    <div class="tab-opt active" onclick="setTab(2)">2</div>
+                    <div class="tab-opt" onclick="setTab(4)">4</div>
+                </div>
+            </div>
+        </div>
+        <div class="setting-item"><label>字号</label>
+            <div class="setting-item-content">
+                <input type="number" id="font-num-input" class="font-num-input" min="8" max="30">
+                <input type="range" id="font-slider" min="8" max="30">
+            </div>
+        </div>
+        <div class="setting-item"><label>语言</label>
+            <div class="setting-item-content">
+                <select id="lang-select">
+                    <option value="c">C</option>
+                    <option value="cpp">C++</option>
+                    <option value="html">HTML</option>
+                </select>
+            </div>
+        </div>
+        <div class="setting-item"><label>主题</label>
+            <div class="setting-item-content">
+                <select id="theme-select">
+                    <option value="github">GitHub Dark</option>
+                    <option value="monokai">Monokai</option>
+                    <option value="dracula">Dracula</option>
+                    <option value="vsdark">VS Dark</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="editor-wrapper">
+        <div id="highlight-layer"></div>
+        <pre id="code-area" contenteditable="true" spellcheck="false">#include &lt;stdio.h&gt;
+
+int main() {
+  printf("Hello World\n");
+  return 0;
+}</pre>
+    </div>
+
+    <section id="keyboard-zone" class="accessory-bar">
+        <div class="top-row">
+            <button class="top-row-btn key-active" onclick="insertTab()">Tab</button>
+            <div class="flex gap-2">
+                <button class="top-row-btn key-active" onclick="handleAction('undo')"><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+                <button class="top-row-btn key-active" onclick="handleAction('redo')"><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+                <button class="top-row-btn key-active" onclick="toggleCollapse()"><i data-lucide="chevron-down" id="collapse-icon" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+
+        <div id="mid-layer" class="symbol-grid">
+            <button class="symbol-btn key-active" onclick="smartInsert('#')">#</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('(')">(</button>
+            <button class="symbol-btn key-active" onclick="smartInsert(')')">)</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('[')">[</button>
+            <button class="symbol-btn key-active" onclick="smartInsert(']')">]</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('{')">{</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('}')">}</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('<')">&lt;</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('>')">&gt;</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('_')">_</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('&')">&amp;</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('.')">.</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('->')">-&gt;</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('\"')">"</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('\'')">'</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('*')">*</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('!')">!</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('=')">=</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('+')">+</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('-')">-</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('/')">/</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('\\')">\</button>
+            <button class="symbol-btn key-active" onclick="smartInsert('%')">%</button>
+            <button class="symbol-btn key-active" onclick="smartInsert(':')">:</button>
+        </div>
+
+        <div id="bot-layer" class="bot-layer">
+            <button class="snippet-btn key-active" onclick="blockInsert('include')">include</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('define')">define</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('main')">main</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('for')">for</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('while')">while</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('scanf')">scanf</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('printf')">printf</button>
+            <button class="snippet-btn key-active" onclick="blockInsert('return')">return</button>
+        </div>
+    </section>
+</div>
+
+<script>
+    lucide.createIcons();
+
+    const codeArea = document.getElementById('code-area');
+    const highlightLayer = document.getElementById('highlight-layer');
+    const settingsPanel = document.getElementById('settings-panel');
+    const langSelect = document.getElementById('lang-select');
+    const fontSlider = document.getElementById('font-slider');
+    const fontNumInput = document.getElementById('font-num-input');
+    const midLayer = document.getElementById('mid-layer');
+    const botLayer = document.getElementById('bot-layer');
+    const collapseIcon = document.getElementById('collapse-icon');
+
+    let currentTabSize = 2;
+    let currentFontSize = 14;
+
+    const themes = {
+        github: { bg: '#0d1117', text: '#c9d1d9', k: '#ff7b72', s: '#a5d6ff', c: '#8b949e', t: '#ffa657', f: '#d2a8ff', tg: '#7ee787' },
+        monokai: { bg: '#272822', text: '#f8f8f2', k: '#f92672', s: '#e6db74', c: '#75715e', t: '#66d9ef', f: '#a6e22e', tg: '#f92672' },
+        dracula: { bg: '#282a36', text: '#f8f8f2', k: '#ff799c6', s: '#f1fa8c', c: '#6272a4', t: '#8be9fd', f: '#50fa7b', tg: '#ff79c6' },
+        vsdark: { bg: '#1e1e1e', text: '#d4d4d4', k: '#569cd6', s: '#ce9178', c: '#6a9955', t: '#4ec9b0', f: '#dcdcaa', tg: '#569cd6' }
+    };
+
+    // 屏幕检测与字号初始化
+    function initResponsiveConfig() {
+        const width = window.innerWidth;
+        let fontSize = 10;
+        let btnSize = 22;
+
+        if (width >= 1024) { // 电脑
+            fontSize = 16;
+            btnSize = 44;
+        } else if (width >= 768) { // 平板
+            fontSize = 14;
+            btnSize = 30;
+        } else { // 手机
+            fontSize = 10;
+            btnSize = 22;
+        }
+
+        updateFontSize(fontSize);
+        document.documentElement.style.setProperty('--btn-size', btnSize + 'px');
+    }
+
+    function updateFontSize(val) {
+        let size = parseInt(val);
+        if (size < 8) size = 8;
+        if (size > 30) size = 30; // 最大字号限制为 30
+        
+        currentFontSize = size;
+        document.documentElement.style.setProperty('--font-size', size + 'px');
+        fontSlider.value = size;
+        fontNumInput.value = size;
+    }
+
+    // Ctrl + 滚轮缩放监听
+    window.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            // 向上滚减少字号，向下滚增加字号
+            const delta = e.deltaY > 0 ? -1 : 1;
+            updateFontSize(currentFontSize + delta);
+        }
+    }, { passive: false });
+
+    fontSlider.addEventListener('input', (e) => updateFontSize(e.target.value));
+    fontNumInput.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value);
+        if (isNaN(val)) return;
+        updateFontSize(val);
+    });
+
+    function highlightCode(code) {
+        const lang = langSelect.value;
+        let html = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        if (lang === 'c' || lang === 'cpp') {
+            const types = lang === 'cpp' ? 'int|char|void|float|double|bool|string|vector|map|auto|std' : 'int|char|void|float|double|long|short|unsigned|struct|static';
+            const keywords = 'include|define|if|else|while|for|return|break|continue|switch|case|default|public|private|using|namespace|#include|#define';
+            html = html.replace(/\/\/.*/g, '<span class="hl-comment">$&</span>')
+                       .replace(/\/\*[\s\S]*?\*\//g, '<span class="hl-comment">$&</span>')
+                       .replace(/"[^"]*"/g, '<span class="hl-string">$&</span>')
+                       .replace(/'[^']*'/g, '<span class="hl-string">$&</span>')
+                       .replace(new RegExp(`\\b(${types})\\b`, 'g'), '<span class="hl-type">$&</span>')
+                       .replace(new RegExp(`\\b(${keywords})\\b`, 'g'), '<span class="hl-keyword">$&</span>')
+                       .replace(/\b(\w+)(?=\s*\()/g, '<span class="hl-func">$&</span>');
+        } else if (lang === 'html') {
+            html = html.replace(/&lt;!--[\s\S]*?--&gt;/g, '<span class="hl-comment">$&</span>')
+                       .replace(/&lt;\/?[a-zA-Z0-9]+(\s|&gt;)/g, m => `<span class="hl-tag">${m}</span>`)
+                       .replace(/"[^"]*"/g, '<span class="hl-string">$&</span>')
+                       .replace(/\b(class|id|style|href|src|type|value|name|onclick)\b/g, '<span class="hl-keyword">$&</span>');
+        }
+        return html + "\n";
+    }
+
+    function updateView() { highlightLayer.innerHTML = highlightCode(codeArea.innerText); }
+
+    function setTab(val) {
+        currentTabSize = val;
+        document.querySelectorAll('.tab-opt').forEach(opt => opt.classList.toggle('active', opt.innerText == val));
+        document.documentElement.style.setProperty('--tab-size', val);
+    }
+
+    function getCurrentIndent() {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return "";
+        const range = selection.getRangeAt(0);
+        let node = range.startContainer;
+        let text = node.nodeType === 3 ? node.textContent : (node.innerText || "");
+        let textBefore = text.substring(0, range.startOffset);
+        const lines = textBefore.split('\n');
+        const currentLine = lines[lines.length - 1];
+        const match = currentLine.match(/^\s*/);
+        return match ? match[0] : "";
+    }
+
+    codeArea.addEventListener('beforeinput', (e) => {
+        const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+        if (pairs[e.data]) {
+            e.preventDefault();
+            smartInsert(e.data);
+        }
+    });
+
+    codeArea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const node = range.startContainer;
+            const text = node.textContent || "";
+            const offset = range.startOffset;
+            const beforeChar = text.substring(offset - 1, offset);
+            const afterChar = text.substring(offset, offset + 1);
+            const indent = getCurrentIndent();
+            const tabStr = " ".repeat(currentTabSize);
+
+            if (beforeChar === '{' && afterChar === '}') {
+                const content = "\n" + indent + tabStr + "\n" + indent;
+                document.execCommand('insertHTML', false, content);
+                const sel = window.getSelection();
+                const totalMove = indent.length + 1;
+                for(let i=0; i<totalMove; i++) sel.modify('move', 'backward', 'character');
+            } else {
+                let extra = "";
+                if (text.substring(0, offset).trim().endsWith('{')) extra = tabStr;
+                document.execCommand('insertHTML', false, '\n' + indent + extra);
+            }
+            updateView();
+        }
+    });
+
+    function insertTab() {
+        document.execCommand('insertHTML', false, " ".repeat(currentTabSize));
+        updateView();
+    }
+
+    function insertText(text) {
+        document.execCommand('insertHTML', false, text);
+        updateView();
+        if (window.navigator.vibrate) window.navigator.vibrate(5);
+    }
+
+    function smartInsert(char) {
+        const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+        if (pairs[char]) {
+            insertText(char + pairs[char]);
+            window.getSelection().modify('move', 'backward', 'character');
+        } else { 
+            insertText(char); 
+        }
+    }
+
+    function blockInsert(type) {
+        const indent = getCurrentIndent();
+        const tabStr = " ".repeat(currentTabSize);
+        let content = '', back = 0;
+        switch(type) {
+            case 'include': content = '#include <>'; back = 1; break;
+            case 'define': content = '#define '; break;
+            case 'main': content = "int main() {\n" + indent + tabStr + "\n" + indent + "  return 0;\n" + indent + "}"; back = ("\n" + indent + "  return 0;\n" + indent + "}").length; break;
+            case 'for': content = "for(int i=0; i<; i++) {\n" + indent + tabStr + "\n" + indent + "}"; back = ("; i++) {\n" + indent + tabStr + "\n" + indent + "}").length; break;
+            case 'while': content = "while() {\n" + indent + tabStr + "\n" + indent + "}"; back = (" {\n" + indent + tabStr + "\n" + indent + "}").length + 1; break;
+            case 'scanf': content = 'scanf("", &);'; back = 6; break;
+            case 'printf': content = 'printf("");'; back = 3; break;
+            case 'return': content = 'return ;'; back = 1; break;
+        }
+        insertText(content);
+        if(back > 0) { 
+            const sel = window.getSelection();
+            for(let i=0; i<back; i++) sel.modify('move', 'backward', 'character'); 
+        }
+    }
+
+    function handleAction(cmd) { document.execCommand(cmd); updateView(); }
+
+    codeArea.addEventListener('scroll', () => { highlightLayer.scrollTop = codeArea.scrollTop; });
+    codeArea.addEventListener('input', updateView);
+
+    document.getElementById('settings-gear').addEventListener('click', (e) => { 
+        e.stopPropagation(); 
+        settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block'; 
+    });
+    document.addEventListener('click', () => settingsPanel.style.display = 'none');
+    settingsPanel.addEventListener('click', (e) => e.stopPropagation());
+
+    langSelect.addEventListener('change', () => { 
+        document.getElementById('lang-indicator').innerText = langSelect.value.toUpperCase(); 
+        updateView(); 
+    });
+
+    document.getElementById('theme-select').addEventListener('change', (e) => {
+        const theme = themes[e.target.value];
+        const r = document.documentElement.style;
+        r.setProperty('--editor-bg', theme.bg); r.setProperty('--editor-text', theme.text);
+        r.setProperty('--hl-keyword', theme.k); r.setProperty('--hl-string', theme.s);
+        r.setProperty('--hl-comment', theme.c); r.setProperty('--hl-type', theme.t);
+        r.setProperty('--hl-func', theme.f); r.setProperty('--hl-tag', theme.tg);
+        updateView();
+    });
+
+    document.getElementById('toggle-tools-btn').addEventListener('click', () => {
+        const zone = document.getElementById('keyboard-zone');
+        zone.style.display = zone.style.display === 'none' ? 'flex' : 'none';
+    });
+
+    function toggleCollapse() {
+        const isCollapsed = midLayer.style.display === 'none';
+        midLayer.style.display = isCollapsed ? 'flex' : 'none';
+        botLayer.style.display = isCollapsed ? 'flex' : 'none';
+        collapseIcon.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+
+    function copyCode() {
+        const text = codeArea.innerText;
+        const el = document.createElement('textarea'); el.value = text;
+        document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+    }
+
+    window.addEventListener('resize', initResponsiveConfig);
+
+    window.onload = () => { 
+        initResponsiveConfig();
+        updateView(); 
+    };
+</script>
+</body>
+</html>
