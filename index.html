@@ -3,487 +3,579 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Code Editor Pro</title>
+    <title>C/C++ Mobile Editor Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap');
-
         :root {
             --editor-bg: #0d1117;
-            --editor-text: #c9d1d9;
-            --keyboard-bg: #161b22;
-            --accent-blue: #1f6feb;
-            /* 初始值将由 JS initResponsiveConfig 覆盖 */
-            --font-size: 14px;
-            --btn-size: 22px;
-            --tab-size: 2;
-            
-            --hl-keyword: #ff7b72;
-            --hl-string: #a5d6ff;
-            --hl-comment: #8b949e;
-            --hl-type: #ffa657;
-            --hl-func: #d2a8ff;
-            --hl-tag: #7ee787;
-            --transition-speed: 0.2s;
+            --editor-fg: #c9d1d9;
+            --kw-color: #ff7b72;
+            --str-color: #a5d6ff;
+            --comment-color: #8b949e;
+            --func-color: #d2a8ff;
+            --type-color: #ffa657;
+            --caret-color: #58a6ff;
         }
 
-        body, html {
-            margin: 0; padding: 0; height: 100%;
-            background-color: var(--editor-bg);
-            transition: background-color var(--transition-speed);
-            color: var(--editor-text);
+        .theme-github-dark { --editor-bg: #0d1117; --editor-fg: #c9d1d9; --kw-color: #ff7b72; --str-color: #a5d6ff; --comment-color: #8b949e; --func-color: #d2a8ff; --type-color: #ffa657; }
+        .theme-monokai { --editor-bg: #272822; --editor-fg: #f8f8f2; --kw-color: #f92672; --str-color: #e6db74; --comment-color: #75715e; --func-color: #a6e22e; --type-color: #66d9ef; }
+        .theme-dracula { --editor-bg: #282a36; --editor-fg: #f8f8f2; --kw-color: #ff79c6; --str-color: #f1fa8c; --comment-color: #6272a4; --func-color: #50fa7b; --type-color: #8be9fd; }
+        .theme-vs-dark { --editor-bg: #1e1e1e; --editor-fg: #d4d4d4; --kw-color: #569cd6; --str-color: #ce9178; --comment-color: #6a9955; --func-color: #dcdcaa; --type-color: #4ec9b0; }
+
+        body {
+            background-color: #1a1a1a;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
             overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        .editor-container { display: flex; flex-direction: column; height: 100vh; }
-        .editor-wrapper { flex: 1; position: relative; overflow: hidden; }
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background-color: var(--editor-bg);
+        }
 
-        #highlight-layer, #code-area {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; margin: 0; padding: 12px;
-            font-family: 'Fira Code', monospace;
-            font-size: var(--font-size);
+        #editor-textarea, #highlight-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            font-family: inherit;
             line-height: 1.5;
-            tab-size: var(--tab-size);
-            white-space: pre-wrap;
-            word-break: break-all;
-            overflow-y: auto;
+            tab-size: 2; /* 初始 tab 为 2 */
+            white-space: pre;
+            word-wrap: normal;
+            border: none;
+            outline: none;
             box-sizing: border-box;
         }
 
-        #code-area {
-            background: transparent; color: transparent;
-            caret-color: var(--accent-blue); z-index: 2;
-            outline: none; -webkit-text-fill-color: transparent;
+        #editor-textarea {
+            background: transparent;
+            color: transparent;
+            caret-color: var(--caret-color);
+            resize: none;
+            z-index: 2;
         }
 
-        #highlight-layer { z-index: 1; color: var(--editor-text); pointer-events: none; }
+        #highlight-layer {
+            color: var(--editor-fg);
+            z-index: 1;
+            pointer-events: none;
+            overflow-y: auto;
+        }
 
-        .hl-keyword { color: var(--hl-keyword); font-weight: 500; }
-        .hl-string { color: var(--hl-string); }
-        .hl-comment { color: var(--hl-comment); font-style: italic; }
-        .hl-type { color: var(--hl-type); }
-        .hl-func { color: var(--hl-func); }
-        .hl-tag { color: var(--hl-tag); }
+        .hl-kw { color: var(--kw-color); font-weight: bold; }
+        .hl-str { color: var(--str-color); }
+        .hl-comment { color: var(--comment-color); font-style: italic; }
+        .hl-func { color: var(--func-color); }
+        .hl-type { color: var(--type-color); }
+        .hl-num { color: #d19a66; }
 
         .accessory-bar {
-            background-color: var(--keyboard-bg);
-            border-top: 1px solid #30363d;
-            padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10;
+            background: #202020;
+            border-top: 1px solid #333;
         }
 
-        .top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-        .top-row-btn {
-            height: calc(var(--btn-size) + 4px); padding: 0 12px; font-size: calc(var(--font-size) * 0.9);
-            background: #21262d; border: 1px solid #30363d;
-            border-radius: 4px; display: flex; align-items: center; color: #c9d1d9;
+        .key-btn {
+            background: #333;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.1s, background 0.2s;
         }
 
-        .symbol-grid { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; }
-        .symbol-grid::after { content: ""; flex: auto; }
-        .symbol-btn {
-            width: var(--btn-size); height: var(--btn-size); font-size: calc(var(--font-size) * 0.9);
-            background: #21262d; border: 1px solid #30363d;
-            border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #c9d1d9;
+        .key-btn:active {
+            transform: scale(0.92);
+            background: #444;
         }
-
-        .bot-layer { display: flex; flex-wrap: wrap; gap: 4px; }
-        .snippet-btn {
-            height: var(--btn-size);
-            padding: 0 10px; font-size: calc(var(--font-size) * 0.8);
-            background: #0d1117; border: 1px solid #30363d;
-            border-radius: 4px; color: #8b949e;
-            display: flex; align-items: center; justify-content: center;
-        }
-
-        .key-active:active { background: #1f6feb !important; color: white !important; }
 
         #settings-panel {
-            display: none; position: fixed; top: 45px; right: 10px;
-            width: 260px; background: #161b22; border: 1px solid #30363d;
-            border-radius: 8px; z-index: 100; padding: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+            z-index: 50;
         }
-        .setting-item { margin-bottom: 15px; font-size: 13px; display: flex; align-items: center; color: #8b949e; }
-        .setting-item label { width: 45px; flex-shrink: 0; }
-        .setting-item-content { flex: 1; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-        
-        .font-num-input {
-            width: 45px; background: #0d1117; border: 1px solid #30363d;
-            color: #c9d1d9; border-radius: 4px; padding: 2px 4px; text-align: center;
-            font-size: 12px; outline: none;
+        #settings-panel.active {
+            transform: translateY(0);
         }
-        input[type="range"] { flex: 1; accent-color: var(--accent-blue); }
-        
-        .tab-options { display: flex; gap: 4px; background: #0d1117; padding: 2px; border-radius: 4px; }
-        .tab-opt { padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
-        .tab-opt.active { background: #21262d; color: white; }
-        select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 4px; font-size: 12px; width: 100%; }
 
-        @media (min-width: 1024px) {
-            .accessory-bar { padding: 15px; gap: 10px; }
-            .symbol-grid { gap: 8px; }
+        .hidden-element { display: none !important; }
+        
+        .radio-tag {
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 10px;
+            transition: all 0.2s;
+        }
+        .radio-tag.active {
+            background: #3b82f6;
+            color: white;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        #symbol-area {
+            display: grid;
+            justify-content: start;
+            width: 100%;
         }
     </style>
 </head>
-<body>
+<body class="theme-github-dark">
 
-<div class="editor-container">
-    <header class="h-12 flex items-center justify-between px-4 bg-[#010409] border-b border-[#30363d]">
-        <div class="flex items-center gap-2">
-            <i data-lucide="code-2" class="text-blue-500 w-5 h-5"></i>
-            <span class="text-xs font-medium text-gray-400" id="lang-indicator">C</span>
+    <header class="h-14 bg-[#1a1a1a] flex items-center justify-between px-4 border-b border-gray-800 shrink-0">
+        <div class="flex items-center space-x-2">
+            <i class="fas fa-code text-blue-400"></i>
+            <span id="lang-indicator" class="font-bold text-sm text-gray-300">C</span>
         </div>
-        <div class="flex items-center gap-5">
-            <button onclick="copyCode()" class="text-blue-500"><i data-lucide="copy" class="w-5 h-5"></i></button>
-            <button id="toggle-tools-btn" class="text-gray-400"><i data-lucide="layout-panel-top" class="w-5 h-5"></i></button>
-            <button id="settings-gear" class="text-gray-400"><i data-lucide="settings" class="w-5 h-5"></i></button>
+        <div class="flex items-center space-x-4 text-lg text-gray-400">
+            <button onclick="copyCode()"><i class="far fa-copy"></i></button>
+            <div class="relative group">
+                <button><i class="fas fa-download"></i></button>
+                <div class="absolute right-0 mt-2 w-32 bg-[#2d2d2d] rounded shadow-xl hidden group-hover:block z-50 border border-gray-700">
+                    <button onclick="downloadFile('txt')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">下载 TXT</button>
+                    <button onclick="downloadFile('code')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">下载源码</button>
+                    <button onclick="exportParams()" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">配置导出</button>
+                </div>
+            </div>
+            <button onclick="clearAll()"><i class="fas fa-trash-alt"></i></button>
+            <button onclick="toggleSettings()"><i class="fas fa-cog"></i></button>
         </div>
     </header>
 
-    <div id="settings-panel">
-        <div class="setting-item"><label>缩进</label>
-            <div class="setting-item-content">
-                <div class="tab-options">
-                    <div class="tab-opt active" onclick="setTab(2)">2</div>
-                    <div class="tab-opt" onclick="setTab(4)">4</div>
+    <main class="editor-container">
+        <div id="highlight-layer"></div>
+        <textarea id="editor-textarea" spellcheck="false" placeholder="在此输入代码..."></textarea>
+    </main>
+
+    <div id="accessory-bar" class="accessory-bar p-2 space-y-3">
+        
+        <!-- 1. 参数调节区 -->
+        <div id="param-adjusters" class="flex justify-between items-center pb-2 border-b border-gray-800">
+            <div class="flex space-x-1" id="target-selector">
+                <div class="radio-tag active" data-target="control">控制行</div>
+                <div class="radio-tag" data-target="symbol">符号矩阵</div>
+                <div class="radio-tag" data-target="snippet">快捷代码</div>
+            </div>
+
+            <div class="flex space-x-2 text-[10px]">
+                <div class="flex flex-col items-center">
+                    <span class="text-gray-500 mb-1">宽</span>
+                    <input type="number" id="input-width" class="bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-gray-500 mb-1">高</span>
+                    <input type="number" id="input-height" class="bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-gray-500 mb-1">圆角</span>
+                    <input type="number" id="input-radius" class="bg-[#2d2d2d] w-7 h-6 text-center rounded border border-gray-700">
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-gray-500 mb-1">字号</span>
+                    <input type="number" id="input-fontsize" class="bg-[#2d2d2d] w-7 h-6 text-center rounded border border-gray-700">
                 </div>
             </div>
         </div>
-        <div class="setting-item"><label>字号</label>
-            <div class="setting-item-content">
-                <input type="number" id="font-num-input" class="font-num-input" min="8" max="30">
-                <input type="range" id="font-slider" min="8" max="30">
+
+        <!-- 2. 控制行 -->
+        <div id="control-line" class="flex justify-between items-center">
+            <div class="flex space-x-2">
+                <div class="key-btn control-key w-12 h-9 text-xs font-bold" onclick="insertTab()">Tab</div>
+                <div id="toggle-params-btn" class="key-btn control-key w-10 h-9 bg-blue-900/40 text-blue-400" onclick="toggleParamArea()">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                <div class="key-btn control-key w-10 h-9" onclick="undo()"><i class="fas fa-undo"></i></div>
+                <div class="key-btn control-key w-10 h-9" onclick="redo()"><i class="fas fa-redo"></i></div>
+                <div class="key-btn control-key w-10 h-9" onclick="toggleMainArea()"><i id="fold-icon" class="fas fa-chevron-down"></i></div>
             </div>
         </div>
-        <div class="setting-item"><label>语言</label>
-            <div class="setting-item-content">
-                <select id="lang-select">
-                    <option value="c">C</option>
+
+        <!-- 3. 符号矩阵 -->
+        <div id="symbol-area" class="gap-y-1.5"></div>
+
+        <!-- 4. 快捷代码段 -->
+        <div id="snippet-area" class="flex flex-wrap gap-2 pt-1 border-t border-gray-800"></div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div id="settings-panel" class="fixed bottom-0 left-0 right-0 bg-[#252525] p-6 rounded-t-2xl shadow-2xl border-t border-gray-700">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-bold">偏好设置</h2>
+            <button onclick="toggleSettings()" class="text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="space-y-6">
+            <div class="flex justify-between items-center">
+                <span>缩进</span>
+                <select id="setting-indent" class="bg-[#333] px-3 py-1 rounded">
+                    <option value="2" selected>2 空格</option>
+                    <option value="4">4 空格</option>
+                </select>
+            </div>
+            <div class="space-y-2">
+                <div class="flex justify-between text-sm"><span>字号</span><span id="font-size-val">16px</span></div>
+                <input type="range" id="setting-fontsize" min="8" max="30" value="16" class="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+            </div>
+            <div class="flex justify-between items-center">
+                <span>语言</span>
+                <select id="setting-lang" class="bg-[#333] px-3 py-1 rounded">
+                    <option value="c" selected>C</option>
                     <option value="cpp">C++</option>
-                    <option value="html">HTML</option>
                 </select>
             </div>
-        </div>
-        <div class="setting-item"><label>主题</label>
-            <div class="setting-item-content">
-                <select id="theme-select">
-                    <option value="github">GitHub Dark</option>
-                    <option value="monokai">Monokai</option>
-                    <option value="dracula">Dracula</option>
-                    <option value="vsdark">VS Dark</option>
-                </select>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="setTheme('github-dark')" class="text-[10px] bg-[#0d1117] py-2 rounded border border-gray-700">GitHub Dark</button>
+                <button onclick="setTheme('monokai')" class="text-[10px] bg-[#272822] py-2 rounded border border-gray-700">Monokai</button>
+                <button onclick="setTheme('dracula')" class="text-[10px] bg-[#282a36] py-2 rounded border border-gray-700">Dracula</button>
+                <button onclick="setTheme('vs-dark')" class="text-[10px] bg-[#1e1e1e] py-2 rounded border border-gray-700">VS Dark</button>
             </div>
         </div>
     </div>
 
-    <div class="editor-wrapper">
-        <div id="highlight-layer"></div>
-        <pre id="code-area" contenteditable="true" spellcheck="false">#include &lt;stdio.h&gt;
-
-int main() {
-  printf("Hello World\n");
-  return 0;
-}</pre>
-    </div>
-
-    <section id="keyboard-zone" class="accessory-bar">
-        <div class="top-row">
-            <button class="top-row-btn key-active" onclick="insertTab()">Tab</button>
-            <div class="flex gap-2">
-                <button class="top-row-btn key-active" onclick="handleAction('undo')"><i data-lucide="undo-2" class="w-4 h-4"></i></button>
-                <button class="top-row-btn key-active" onclick="handleAction('redo')"><i data-lucide="redo-2" class="w-4 h-4"></i></button>
-                <button class="top-row-btn key-active" onclick="toggleCollapse()"><i data-lucide="chevron-down" id="collapse-icon" class="w-4 h-4"></i></button>
-            </div>
-        </div>
-
-        <div id="mid-layer" class="symbol-grid">
-            <button class="symbol-btn key-active" onclick="smartInsert('#')">#</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('(')">(</button>
-            <button class="symbol-btn key-active" onclick="smartInsert(')')">)</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('[')">[</button>
-            <button class="symbol-btn key-active" onclick="smartInsert(']')">]</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('{')">{</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('}')">}</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('<')">&lt;</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('>')">&gt;</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('_')">_</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('&')">&amp;</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('.')">.</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('->')">-&gt;</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('\"')">"</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('\'')">'</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('*')">*</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('!')">!</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('=')">=</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('+')">+</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('-')">-</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('/')">/</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('\\')">\</button>
-            <button class="symbol-btn key-active" onclick="smartInsert('%')">%</button>
-            <button class="symbol-btn key-active" onclick="smartInsert(':')">:</button>
-        </div>
-
-        <div id="bot-layer" class="bot-layer">
-            <button class="snippet-btn key-active" onclick="blockInsert('include')">include</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('define')">define</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('main')">main</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('for')">for</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('while')">while</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('scanf')">scanf</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('printf')">printf</button>
-            <button class="snippet-btn key-active" onclick="blockInsert('return')">return</button>
-        </div>
-    </section>
-</div>
-
-<script>
-    lucide.createIcons();
-
-    const codeArea = document.getElementById('code-area');
-    const highlightLayer = document.getElementById('highlight-layer');
-    const settingsPanel = document.getElementById('settings-panel');
-    const langSelect = document.getElementById('lang-select');
-    const fontSlider = document.getElementById('font-slider');
-    const fontNumInput = document.getElementById('font-num-input');
-    const midLayer = document.getElementById('mid-layer');
-    const botLayer = document.getElementById('bot-layer');
-    const collapseIcon = document.getElementById('collapse-icon');
-
-    let currentTabSize = 2;
-    let currentFontSize = 14;
-
-    const themes = {
-        github: { bg: '#0d1117', text: '#c9d1d9', k: '#ff7b72', s: '#a5d6ff', c: '#8b949e', t: '#ffa657', f: '#d2a8ff', tg: '#7ee787' },
-        monokai: { bg: '#272822', text: '#f8f8f2', k: '#f92672', s: '#e6db74', c: '#75715e', t: '#66d9ef', f: '#a6e22e', tg: '#f92672' },
-        dracula: { bg: '#282a36', text: '#f8f8f2', k: '#ff799c6', s: '#f1fa8c', c: '#6272a4', t: '#8be9fd', f: '#50fa7b', tg: '#ff79c6' },
-        vsdark: { bg: '#1e1e1e', text: '#d4d4d4', k: '#569cd6', s: '#ce9178', c: '#6a9955', t: '#4ec9b0', f: '#dcdcaa', tg: '#569cd6' }
-    };
-
-    // 屏幕检测与字号初始化
-    function initResponsiveConfig() {
-        const width = window.innerWidth;
-        let fontSize = 10;
-        let btnSize = 22;
-
-        if (width >= 1024) { // 电脑
-            fontSize = 16;
-            btnSize = 44;
-        } else if (width >= 768) { // 平板
-            fontSize = 14;
-            btnSize = 30;
-        } else { // 手机
-            fontSize = 10;
-            btnSize = 22;
-        }
-
-        updateFontSize(fontSize);
-        document.documentElement.style.setProperty('--btn-size', btnSize + 'px');
-    }
-
-    function updateFontSize(val) {
-        let size = parseInt(val);
-        if (size < 8) size = 8;
-        if (size > 30) size = 30; // 最大字号限制为 30
+    <script>
+        const textarea = document.getElementById('editor-textarea');
+        const highlightLayer = document.getElementById('highlight-layer');
+        const settingsPanel = document.getElementById('settings-panel');
         
-        currentFontSize = size;
-        document.documentElement.style.setProperty('--font-size', size + 'px');
-        fontSlider.value = size;
-        fontNumInput.value = size;
-    }
-
-    // Ctrl + 滚轮缩放监听
-    window.addEventListener('wheel', (e) => {
-        if (e.ctrlKey) {
-            e.preventDefault();
-            // 向上滚减少字号，向下滚增加字号
-            const delta = e.deltaY > 0 ? -1 : 1;
-            updateFontSize(currentFontSize + delta);
+        // 获取初始智能字号
+        function getSmartFontSize() {
+            const width = window.innerWidth;
+            if (width < 640) return 12;      // 手机
+            if (width < 1024) return 14;     // 平板
+            return 16;                       // 电脑
         }
-    }, { passive: false });
 
-    fontSlider.addEventListener('input', (e) => updateFontSize(e.target.value));
-    fontNumInput.addEventListener('input', (e) => {
-        let val = parseInt(e.target.value);
-        if (isNaN(val)) return;
-        updateFontSize(val);
-    });
-
-    function highlightCode(code) {
-        const lang = langSelect.value;
-        let html = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        if (lang === 'c' || lang === 'cpp') {
-            const types = lang === 'cpp' ? 'int|char|void|float|double|bool|string|vector|map|auto|std' : 'int|char|void|float|double|long|short|unsigned|struct|static';
-            const keywords = 'include|define|if|else|while|for|return|break|continue|switch|case|default|public|private|using|namespace|#include|#define';
-            html = html.replace(/\/\/.*/g, '<span class="hl-comment">$&</span>')
-                       .replace(/\/\*[\s\S]*?\*\//g, '<span class="hl-comment">$&</span>')
-                       .replace(/"[^"]*"/g, '<span class="hl-string">$&</span>')
-                       .replace(/'[^']*'/g, '<span class="hl-string">$&</span>')
-                       .replace(new RegExp(`\\b(${types})\\b`, 'g'), '<span class="hl-type">$&</span>')
-                       .replace(new RegExp(`\\b(${keywords})\\b`, 'g'), '<span class="hl-keyword">$&</span>')
-                       .replace(/\b(\w+)(?=\s*\()/g, '<span class="hl-func">$&</span>');
-        } else if (lang === 'html') {
-            html = html.replace(/&lt;!--[\s\S]*?--&gt;/g, '<span class="hl-comment">$&</span>')
-                       .replace(/&lt;\/?[a-zA-Z0-9]+(\s|&gt;)/g, m => `<span class="hl-tag">${m}</span>`)
-                       .replace(/"[^"]*"/g, '<span class="hl-string">$&</span>')
-                       .replace(/\b(class|id|style|href|src|type|value|name|onclick)\b/g, '<span class="hl-keyword">$&</span>');
-        }
-        return html + "\n";
-    }
-
-    function updateView() { highlightLayer.innerHTML = highlightCode(codeArea.innerText); }
-
-    function setTab(val) {
-        currentTabSize = val;
-        document.querySelectorAll('.tab-opt').forEach(opt => opt.classList.toggle('active', opt.innerText == val));
-        document.documentElement.style.setProperty('--tab-size', val);
-    }
-
-    function getCurrentIndent() {
-        const selection = window.getSelection();
-        if (!selection.rangeCount) return "";
-        const range = selection.getRangeAt(0);
-        let node = range.startContainer;
-        let text = node.nodeType === 3 ? node.textContent : (node.innerText || "");
-        let textBefore = text.substring(0, range.startOffset);
-        const lines = textBefore.split('\n');
-        const currentLine = lines[lines.length - 1];
-        const match = currentLine.match(/^\s*/);
-        return match ? match[0] : "";
-    }
-
-    codeArea.addEventListener('beforeinput', (e) => {
-        const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
-        if (pairs[e.data]) {
-            e.preventDefault();
-            smartInsert(e.data);
-        }
-    });
-
-    codeArea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const selection = window.getSelection();
-            if (!selection.rangeCount) return;
-            const range = selection.getRangeAt(0);
-            const node = range.startContainer;
-            const text = node.textContent || "";
-            const offset = range.startOffset;
-            const beforeChar = text.substring(offset - 1, offset);
-            const afterChar = text.substring(offset, offset + 1);
-            const indent = getCurrentIndent();
-            const tabStr = " ".repeat(currentTabSize);
-
-            if (beforeChar === '{' && afterChar === '}') {
-                const content = "\n" + indent + tabStr + "\n" + indent;
-                document.execCommand('insertHTML', false, content);
-                const sel = window.getSelection();
-                const totalMove = indent.length + 1;
-                for(let i=0; i<totalMove; i++) sel.modify('move', 'backward', 'character');
-            } else {
-                let extra = "";
-                if (text.substring(0, offset).trim().endsWith('{')) extra = tabStr;
-                document.execCommand('insertHTML', false, '\n' + indent + extra);
+        let config = {
+            indentSize: 2,           // 默认 2
+            fontSize: getSmartFontSize(), // 智能检测初始字号
+            language: 'c',           // 默认 C
+            theme: 'github-dark',
+            showParams: true,
+            currentTarget: 'control',
+            params: {
+                control: { width: 45, height: 36, radius: 4, fontSize: 13 },
+                symbol: { width: 34, height: 34, radius: 4, fontSize: 13 },
+                snippet: { width: 60, height: 32, radius: 4, fontSize: 12 }
             }
-            updateView();
+        };
+
+        let history = [""];
+        let historyIdx = 0;
+
+        window.onload = () => {
+            initUI();
+            initListeners();
+            applyConfig();
+            handleInput();
+            window.addEventListener('resize', () => {
+                updateKeyStyles();
+            });
+        };
+
+        function initUI() {
+            const symbols = "#()[]{ }< >_&.->\"'*!=+-/\\%:;".split('');
+            const symbolArea = document.getElementById('symbol-area');
+            symbolArea.innerHTML = '';
+            symbols.forEach(s => {
+                const btn = document.createElement('div');
+                btn.className = 'key-btn symbol-key shrink-0';
+                btn.innerText = s;
+                btn.onclick = () => insertText(s);
+                symbolArea.appendChild(btn);
+            });
+
+            const snippets = ["include", "define", "if", "else", "switch", "break", "for", "while", "do", "return", "main"];
+            const snippetArea = document.getElementById('snippet-area');
+            snippetArea.innerHTML = '';
+            snippets.forEach(snip => {
+                const btn = document.createElement('div');
+                btn.className = 'key-btn snippet-key px-2.5';
+                btn.innerText = snip;
+                btn.onclick = () => insertSnippet(snip);
+                snippetArea.appendChild(btn);
+            });
         }
-    });
 
-    function insertTab() {
-        document.execCommand('insertHTML', false, " ".repeat(currentTabSize));
-        updateView();
-    }
+        function initListeners() {
+            // 参数切换
+            document.querySelectorAll('.radio-tag').forEach(tag => {
+                tag.onclick = function() {
+                    document.querySelectorAll('.radio-tag').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    config.currentTarget = this.dataset.target;
+                    syncInputValues();
+                };
+            });
 
-    function insertText(text) {
-        document.execCommand('insertHTML', false, text);
-        updateView();
-        if (window.navigator.vibrate) window.navigator.vibrate(5);
-    }
+            // 输入监听
+            const inputs = {
+                'input-width': 'width',
+                'input-height': 'height',
+                'input-radius': 'radius',
+                'input-fontsize': 'fontSize'
+            };
+            Object.keys(inputs).forEach(id => {
+                document.getElementById(id).oninput = function() {
+                    const val = parseInt(this.value) || 0;
+                    config.params[config.currentTarget][inputs[id]] = val;
+                    updateKeyStyles();
+                };
+            });
 
-    function smartInsert(char) {
-        const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
-        if (pairs[char]) {
-            insertText(char + pairs[char]);
-            window.getSelection().modify('move', 'backward', 'character');
-        } else { 
-            insertText(char); 
+            // CTRL + 滚轮缩放字号
+            window.addEventListener('wheel', (e) => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    const delta = e.deltaY > 0 ? -1 : 1;
+                    let newSize = config.fontSize + delta;
+                    if (newSize < 8) newSize = 8;
+                    if (newSize > 30) newSize = 30;
+                    
+                    config.fontSize = newSize;
+                    applyConfig();
+                }
+            }, { passive: false });
+
+            // 偏好设置监听
+            document.getElementById('setting-indent').onchange = (e) => {
+                config.indentSize = parseInt(e.target.value);
+                textarea.style.tabSize = config.indentSize;
+                highlightLayer.style.tabSize = config.indentSize;
+            };
+            document.getElementById('setting-lang').onchange = (e) => {
+                config.language = e.target.value;
+                updateLangIndicator();
+            };
         }
-    }
 
-    function blockInsert(type) {
-        const indent = getCurrentIndent();
-        const tabStr = " ".repeat(currentTabSize);
-        let content = '', back = 0;
-        switch(type) {
-            case 'include': content = '#include <>'; back = 1; break;
-            case 'define': content = '#define '; break;
-            case 'main': content = "int main() {\n" + indent + tabStr + "\n" + indent + "  return 0;\n" + indent + "}"; back = ("\n" + indent + "  return 0;\n" + indent + "}").length; break;
-            case 'for': content = "for(int i=0; i<; i++) {\n" + indent + tabStr + "\n" + indent + "}"; back = ("; i++) {\n" + indent + tabStr + "\n" + indent + "}").length; break;
-            case 'while': content = "while() {\n" + indent + tabStr + "\n" + indent + "}"; back = (" {\n" + indent + tabStr + "\n" + indent + "}").length + 1; break;
-            case 'scanf': content = 'scanf("", &);'; back = 6; break;
-            case 'printf': content = 'printf("");'; back = 3; break;
-            case 'return': content = 'return ;'; back = 1; break;
+        function syncInputValues() {
+            const p = config.params[config.currentTarget];
+            document.getElementById('input-width').value = p.width;
+            document.getElementById('input-height').value = p.height;
+            document.getElementById('input-radius').value = p.radius;
+            document.getElementById('input-fontsize').value = p.fontSize;
         }
-        insertText(content);
-        if(back > 0) { 
-            const sel = window.getSelection();
-            for(let i=0; i<back; i++) sel.modify('move', 'backward', 'character'); 
+
+        function updateKeyStyles() {
+            // 控制行
+            const cp = config.params.control;
+            document.querySelectorAll('.control-key').forEach(btn => {
+                if(!btn.id.includes('toggle')) btn.style.width = cp.width + 'px';
+                btn.style.height = cp.height + 'px';
+                btn.style.borderRadius = cp.radius + 'px';
+                btn.style.fontSize = cp.fontSize + 'px';
+            });
+
+            // 符号区 (Grid)
+            const sp = config.params.symbol;
+            const container = document.getElementById('symbol-area');
+            if (container) {
+                const containerWidth = container.clientWidth;
+                const btnWidth = sp.width;
+                const minGap = 6;
+                const count = Math.floor((containerWidth + minGap) / (btnWidth + minGap));
+                container.style.gridTemplateColumns = `repeat(${count}, ${btnWidth}px)`;
+                container.style.columnGap = minGap + 'px';
+
+                document.querySelectorAll('.symbol-key').forEach(btn => {
+                    btn.style.width = sp.width + 'px';
+                    btn.style.height = sp.height + 'px';
+                    btn.style.borderRadius = sp.radius + 'px';
+                    btn.style.fontSize = sp.fontSize + 'px';
+                });
+            }
+
+            // 快捷代码
+            const snp = config.params.snippet;
+            document.querySelectorAll('.snippet-key').forEach(btn => {
+                btn.style.minWidth = snp.width + 'px';
+                btn.style.height = snp.height + 'px';
+                btn.style.borderRadius = snp.radius + 'px';
+                btn.style.fontSize = snp.fontSize + 'px';
+            });
         }
-    }
 
-    function handleAction(cmd) { document.execCommand(cmd); updateView(); }
+        function updateLangIndicator() {
+            // 修复标题映射逻辑
+            const langMap = {
+                'c': 'C',
+                'cpp': 'C++'
+            };
+            document.getElementById('lang-indicator').innerText = langMap[config.language] || config.language.toUpperCase();
+        }
 
-    codeArea.addEventListener('scroll', () => { highlightLayer.scrollTop = codeArea.scrollTop; });
-    codeArea.addEventListener('input', updateView);
+        function applyConfig() {
+            textarea.style.fontSize = config.fontSize + 'px';
+            highlightLayer.style.fontSize = config.fontSize + 'px';
+            textarea.style.tabSize = config.indentSize;
+            highlightLayer.style.tabSize = config.indentSize;
+            
+            document.getElementById('setting-fontsize').value = config.fontSize;
+            document.getElementById('font-size-val').innerText = config.fontSize + 'px';
+            document.getElementById('setting-lang').value = config.language;
+            document.getElementById('setting-indent').value = config.indentSize;
+            
+            updateLangIndicator();
+            syncInputValues();
+            updateKeyStyles();
+        }
 
-    document.getElementById('settings-gear').addEventListener('click', (e) => { 
-        e.stopPropagation(); 
-        settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block'; 
-    });
-    document.addEventListener('click', () => settingsPanel.style.display = 'none');
-    settingsPanel.addEventListener('click', (e) => e.stopPropagation());
+        // --- 编辑器核心逻辑 ---
+        function highlight(code) {
+            const keywords = /\b(if|else|switch|case|default|while|do|for|break|continue|return|goto|sizeof|typedef|struct|union|enum|extern|static|const|volatile|inline|restrict|include|define|undef|ifdef|ifndef|endif)\b/g;
+            const types = /\b(int|char|float|double|void|long|short|signed|unsigned|bool|string|vector|std|auto)\b/g;
+            const functions = /\b([a-zA-Z_]\w*)(?=\s*\()/g;
+            const strings = /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g;
+            const comments = /\/\/.+?(\n|$)|(\/\*[\s\S]*?\*\/)/g;
+            const numbers = /\b\d+(\.\d+)?\b/g;
+            let html = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html = html.replace(comments, m => `<span class="hl-comment">${m}</span>`);
+            html = html.replace(strings, m => `<span class="hl-str">${m}</span>`);
+            html = html.replace(keywords, m => `<span class="hl-kw">${m}</span>`);
+            html = html.replace(types, m => `<span class="hl-type">${m}</span>`);
+            html = html.replace(functions, m => `<span class="hl-func">${m}</span>`);
+            html = html.replace(numbers, m => `<span class="hl-num">${m}</span>`);
+            return html + "\n";
+        }
 
-    langSelect.addEventListener('change', () => { 
-        document.getElementById('lang-indicator').innerText = langSelect.value.toUpperCase(); 
-        updateView(); 
-    });
+        function handleInput() {
+            const code = textarea.value;
+            highlightLayer.innerHTML = highlight(code);
+            syncScroll();
+            if (history[historyIdx] !== code) {
+                history = history.slice(0, historyIdx + 1);
+                history.push(code);
+                if (history.length > 50) history.shift();
+                else historyIdx++;
+            }
+        }
 
-    document.getElementById('theme-select').addEventListener('change', (e) => {
-        const theme = themes[e.target.value];
-        const r = document.documentElement.style;
-        r.setProperty('--editor-bg', theme.bg); r.setProperty('--editor-text', theme.text);
-        r.setProperty('--hl-keyword', theme.k); r.setProperty('--hl-string', theme.s);
-        r.setProperty('--hl-comment', theme.c); r.setProperty('--hl-type', theme.t);
-        r.setProperty('--hl-func', theme.f); r.setProperty('--hl-tag', theme.tg);
-        updateView();
-    });
+        function syncScroll() {
+            highlightLayer.scrollTop = textarea.scrollTop;
+            highlightLayer.scrollLeft = textarea.scrollLeft;
+        }
 
-    document.getElementById('toggle-tools-btn').addEventListener('click', () => {
-        const zone = document.getElementById('keyboard-zone');
-        zone.style.display = zone.style.display === 'none' ? 'flex' : 'none';
-    });
+        textarea.oninput = handleInput;
+        textarea.onscroll = syncScroll;
+        textarea.onkeydown = function(e) {
+            const start = this.selectionStart;
+            const val = this.value;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const lines = val.substring(0, start).split('\n');
+                const lastLine = lines[lines.length - 1];
+                const indent = lastLine.match(/^\s*/)[0];
+                let extraIndent = "";
+                const lastChar = lastLine.trim().slice(-1);
+                if (lastChar === '{') {
+                    extraIndent = " ".repeat(config.indentSize);
+                    if (val[start] === '}') {
+                        insertAtCursor("\n" + indent + extraIndent + "\n" + indent);
+                        this.selectionStart = this.selectionEnd = start + 1 + indent.length + extraIndent.length;
+                        handleInput();
+                        return;
+                    }
+                }
+                insertAtCursor("\n" + indent + extraIndent);
+                handleInput();
+            }
+            const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+            if (pairs[e.key]) {
+                e.preventDefault();
+                insertAtCursor(e.key + pairs[e.key]);
+                this.selectionStart = this.selectionEnd = start + 1;
+                handleInput();
+            }
+        };
 
-    function toggleCollapse() {
-        const isCollapsed = midLayer.style.display === 'none';
-        midLayer.style.display = isCollapsed ? 'flex' : 'none';
-        botLayer.style.display = isCollapsed ? 'flex' : 'none';
-        collapseIcon.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
-    }
+        function insertAtCursor(text) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + text.length;
+            if ("vibrate" in navigator) navigator.vibrate(5);
+        }
 
-    function copyCode() {
-        const text = codeArea.innerText;
-        const el = document.createElement('textarea'); el.value = text;
-        document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-    }
+        function insertText(text) { insertAtCursor(text); textarea.focus(); handleInput(); }
+        function insertTab() { insertText(" ".repeat(config.indentSize)); }
+        
+        function insertSnippet(type) {
+            let text = ""; let offset = 0;
+            switch(type) {
+                case 'include': 
+                    text = config.language === 'cpp' ? "#include <iostream>\n" : "#include <stdio.h>\n"; 
+                    break;
+                case 'define': text = "#define "; break;
+                case 'if': text = "if () {\n    \n}"; offset = -9; break;
+                case 'else': text = "else {\n    \n}"; offset = -2; break;
+                case 'for': text = "for (int i = 0; i < n; i++) {\n    \n}"; offset = -26; break;
+                case 'while': text = "while () {\n    \n}"; offset = -12; break;
+                case 'return': text = "return 0;"; break;
+                case 'main': 
+                    text = config.language === 'cpp' ? 
+                        "#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}" : 
+                        "#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}";
+                    offset = -15; break;
+                default: text = type + " ";
+            }
+            insertAtCursor(text);
+            textarea.selectionStart = textarea.selectionEnd += offset;
+            textarea.focus();
+            handleInput();
+        }
 
-    window.addEventListener('resize', initResponsiveConfig);
-
-    window.onload = () => { 
-        initResponsiveConfig();
-        updateView(); 
-    };
-</script>
+        function undo() { if (historyIdx > 0) { historyIdx--; textarea.value = history[historyIdx]; handleInput(); } }
+        function redo() { if (historyIdx < history.length - 1) { historyIdx++; textarea.value = history[historyIdx]; handleInput(); } }
+        function toggleParamArea() {
+            config.showParams = !config.showParams;
+            document.getElementById('param-adjusters').classList.toggle('hidden-element', !config.showParams);
+            document.getElementById('toggle-params-btn').classList.toggle('bg-blue-900/40', config.showParams);
+            setTimeout(updateKeyStyles, 50);
+        }
+        function toggleMainArea() {
+            const sym = document.getElementById('symbol-area');
+            const snp = document.getElementById('snippet-area');
+            const icon = document.getElementById('fold-icon');
+            const isHidden = sym.classList.contains('hidden-element');
+            sym.classList.toggle('hidden-element', !isHidden);
+            snp.classList.toggle('hidden-element', !isHidden);
+            icon.className = isHidden ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
+            if(!isHidden) setTimeout(updateKeyStyles, 50);
+        }
+        function toggleSettings() { settingsPanel.classList.toggle('active'); }
+        function setTheme(theme) { document.body.className = 'theme-' + theme; }
+        document.getElementById('setting-fontsize').oninput = (e) => { 
+            config.fontSize = parseInt(e.target.value); 
+            applyConfig(); 
+        };
+        function copyCode() { textarea.select(); document.execCommand('copy'); }
+        function clearAll() { if (confirm("清空代码？")) { textarea.value = ""; handleInput(); } }
+        function downloadFile(type) {
+            let filename = "main." + (type === 'txt' ? 'txt' : (config.language === 'cpp' ? 'cpp' : 'c'));
+            const blob = new Blob([textarea.value], {type: "text/plain"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+        }
+        function exportParams() {
+            const blob = new Blob([JSON.stringify(config, null, 2)], {type: "application/json"});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "editor-config.json"; a.click();
+        }
+    </script>
 </body>
 </html>
