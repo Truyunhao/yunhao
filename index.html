@@ -49,7 +49,7 @@
             padding: 15px;
             font-family: inherit;
             line-height: 1.5;
-            tab-size: 2; /* 初始 tab 为 2 */
+            tab-size: 2;
             white-space: pre;
             word-wrap: normal;
             border: none;
@@ -82,6 +82,7 @@
         .accessory-bar {
             background: #202020;
             border-top: 1px solid #333;
+            z-index: 10;
         }
 
         .key-btn {
@@ -93,6 +94,7 @@
             cursor: pointer;
             user-select: none;
             transition: transform 0.1s, background 0.2s;
+            width: 100%;
         }
 
         .key-btn:active {
@@ -100,27 +102,35 @@
             background: #444;
         }
 
-        #settings-panel {
-            transform: translateY(100%);
-            transition: transform 0.3s ease-out;
-            z-index: 50;
-        }
-        #settings-panel.active {
-            transform: translateY(0);
+        .grid-wrap {
+            display: grid;
+            width: 100%;
+            gap: 8px;
+            grid-template-columns: repeat(auto-fill, minmax(var(--btn-w, 34px), 1fr));
         }
 
-        .hidden-element { display: none !important; }
-        
+        #snippet-area {
+            grid-template-columns: repeat(auto-fill, minmax(var(--snip-w, 68px), 1fr));
+        }
+
         .radio-tag {
             cursor: pointer;
-            padding: 2px 8px;
+            padding: 2px 10px;
             border-radius: 999px;
-            font-size: 10px;
+            font-size: 11px;
             transition: all 0.2s;
+            white-space: nowrap;
         }
         .radio-tag.active {
             background: #3b82f6;
             color: white;
+        }
+
+        .param-input:focus {
+            outline: none;
+            background: #3b82f6 !important;
+            color: white !important;
+            border-color: #3b82f6;
         }
 
         input[type="number"]::-webkit-inner-spin-button,
@@ -129,10 +139,88 @@
             margin: 0;
         }
 
-        #symbol-area {
-            display: grid;
-            justify-content: start;
+        input[type=range] {
+            -webkit-appearance: none;
+            background: #333;
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 0 6px rgba(0,0,0,0.5);
+        }
+
+        .foldable-content {
+            max-height: 1000px;
+            overflow: hidden;
+            transition: max-height 0.3s cubic-bezier(0, 1, 0, 1);
+        }
+        .foldable-content.collapsed {
+            max-height: 0;
+        }
+
+        /* 响应式参数调节区布局 */
+        .param-adjuster-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
             width: 100%;
+        }
+
+        .slider-inputs-group {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            width: 100%;
+        }
+
+        /* 移动端 (默认) */
+        @media (max-width: 767px) {
+            .slider-inputs-group {
+                max-width: 280px; /* 限制宽度使滑动条与按钮组接近 1:1 或比例协调 */
+            }
+            #quick-slider {
+                flex: 1; /* 滑动条占据左侧剩余空间 */
+            }
+        }
+
+        /* 桌面端 */
+        @media (min-width: 768px) {
+            .param-adjuster-container {
+                flex-direction: row;
+                justify-content: space-between;
+            }
+            .slider-inputs-group {
+                width: auto;
+                justify-content: flex-end;
+            }
+            #quick-slider {
+                width: 140px;
+            }
+        }
+
+        /* 设置面板修复 */
+        #settings-panel {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #settings-panel.active {
+            transform: translateY(0);
+        }
+        #settings-overlay {
+            display: none;
+            z-index: 40;
+        }
+        #settings-overlay.active {
+            display: block;
         }
     </style>
 </head>
@@ -145,14 +233,6 @@
         </div>
         <div class="flex items-center space-x-4 text-lg text-gray-400">
             <button onclick="copyCode()"><i class="far fa-copy"></i></button>
-            <div class="relative group">
-                <button><i class="fas fa-download"></i></button>
-                <div class="absolute right-0 mt-2 w-32 bg-[#2d2d2d] rounded shadow-xl hidden group-hover:block z-50 border border-gray-700">
-                    <button onclick="downloadFile('txt')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">下载 TXT</button>
-                    <button onclick="downloadFile('code')" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">下载源码</button>
-                    <button onclick="exportParams()" class="w-full text-left px-4 py-2 text-xs hover:bg-gray-700">配置导出</button>
-                </div>
-            </div>
             <button onclick="clearAll()"><i class="fas fa-trash-alt"></i></button>
             <button onclick="toggleSettings()"><i class="fas fa-cog"></i></button>
         </div>
@@ -163,88 +243,93 @@
         <textarea id="editor-textarea" spellcheck="false" placeholder="在此输入代码..."></textarea>
     </main>
 
-    <div id="accessory-bar" class="accessory-bar p-2 space-y-3">
-        
-        <!-- 1. 参数调节区 -->
-        <div id="param-adjusters" class="flex justify-between items-center pb-2 border-b border-gray-800">
-            <div class="flex space-x-1" id="target-selector">
-                <div class="radio-tag active" data-target="control">控制行</div>
-                <div class="radio-tag" data-target="symbol">符号矩阵</div>
-                <div class="radio-tag" data-target="snippet">快捷代码</div>
-            </div>
+    <div id="accessory-bar" class="accessory-bar p-3">
+        <!-- 响应式参数调节区 -->
+        <div id="param-adjusters" class="pb-3 border-b border-gray-800 mb-3 overflow-hidden transition-all duration-300">
+            <div class="param-adjuster-container">
+                
+                <!-- 手机端居中 / 桌面端居左 -->
+                <div id="target-selector" class="flex space-x-1 shrink-0">
+                    <div class="radio-tag active" data-target="control">控制行</div>
+                    <div class="radio-tag" data-target="symbol">符号矩阵</div>
+                    <div class="radio-tag" data-target="snippet">快捷代码</div>
+                </div>
 
-            <div class="flex space-x-2 text-[10px]">
-                <div class="flex flex-col items-center">
-                    <span class="text-gray-500 mb-1">宽</span>
-                    <input type="number" id="input-width" class="bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
+                <!-- 组合体：滑动条(左) + 按钮组(右) -> 整体居中 -->
+                <div class="slider-inputs-group">
+                    <div class="flex-grow flex items-center">
+                        <input type="range" id="quick-slider" class="w-full" min="0" max="100" value="0">
+                    </div>
+
+                    <div class="flex space-x-1 text-[10px] shrink-0">
+                        <div class="flex flex-col items-center">
+                            <span class="text-gray-500 mb-0.5 scale-90">宽</span>
+                            <input type="number" id="input-width" data-prop="width" class="param-input bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-gray-500 mb-0.5 scale-90">高</span>
+                            <input type="number" id="input-height" data-prop="height" class="param-input bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-gray-500 mb-0.5 scale-90">圆角</span>
+                            <input type="number" id="input-radius" data-prop="radius" class="param-input bg-[#2d2d2d] w-8 h-6 text-center rounded border border-gray-700">
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-gray-500 mb-0.5 scale-90">字号</span>
+                            <input type="number" id="input-fontsize" data-prop="fontSize" class="param-input bg-[#2d2d2d] w-8 h-6 text-center rounded border border-gray-700">
+                        </div>
+                    </div>
                 </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-gray-500 mb-1">高</span>
-                    <input type="number" id="input-height" class="bg-[#2d2d2d] w-9 h-6 text-center rounded border border-gray-700">
-                </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-gray-500 mb-1">圆角</span>
-                    <input type="number" id="input-radius" class="bg-[#2d2d2d] w-7 h-6 text-center rounded border border-gray-700">
-                </div>
-                <div class="flex flex-col items-center">
-                    <span class="text-gray-500 mb-1">字号</span>
-                    <input type="number" id="input-fontsize" class="bg-[#2d2d2d] w-7 h-6 text-center rounded border border-gray-700">
-                </div>
+
             </div>
         </div>
 
-        <!-- 2. 控制行 -->
-        <div id="control-line" class="flex justify-between items-center">
+        <div id="control-line" class="flex justify-between items-center mb-2">
             <div class="flex space-x-2">
-                <div class="key-btn control-key w-12 h-9 text-xs font-bold" onclick="insertTab()">Tab</div>
-                <div id="toggle-params-btn" class="key-btn control-key w-10 h-9 bg-blue-900/40 text-blue-400" onclick="toggleParamArea()">
+                <div class="key-btn control-key w-12 h-9 text-xs font-bold shrink-0" onclick="insertTab()">Tab</div>
+                <div id="toggle-params-btn" class="key-btn control-key w-10 h-9 bg-blue-900/40 text-blue-400 shrink-0" onclick="toggleParamArea()">
                     <i class="fas fa-sliders-h"></i>
                 </div>
             </div>
             <div class="flex space-x-2">
-                <div class="key-btn control-key w-10 h-9" onclick="undo()"><i class="fas fa-undo"></i></div>
-                <div class="key-btn control-key w-10 h-9" onclick="redo()"><i class="fas fa-redo"></i></div>
-                <div class="key-btn control-key w-10 h-9" onclick="toggleMainArea()"><i id="fold-icon" class="fas fa-chevron-down"></i></div>
+                <div class="key-btn control-key w-10 h-9 shrink-0" onclick="undo()"><i class="fas fa-undo"></i></div>
+                <div class="key-btn control-key w-10 h-9 shrink-0" onclick="redo()"><i class="fas fa-redo"></i></div>
+                <div class="key-btn control-key w-10 h-9 shrink-0" onclick="toggleMainArea()"><i id="fold-icon" class="fas fa-chevron-down"></i></div>
             </div>
         </div>
 
-        <!-- 3. 符号矩阵 -->
-        <div id="symbol-area" class="gap-y-1.5"></div>
-
-        <!-- 4. 快捷代码段 -->
-        <div id="snippet-area" class="flex flex-wrap gap-2 pt-1 border-t border-gray-800"></div>
+        <div id="foldable-main" class="foldable-content space-y-3">
+            <div id="symbol-area" class="grid-wrap"></div>
+            <div id="snippet-area" class="grid-wrap pt-1 border-t border-gray-800"></div>
+        </div>
     </div>
 
+    <!-- 遮罩层 -->
+    <div id="settings-overlay" class="fixed inset-0 bg-black/60" onclick="toggleSettings()"></div>
+
     <!-- 设置面板 -->
-    <div id="settings-panel" class="fixed bottom-0 left-0 right-0 bg-[#252525] p-6 rounded-t-2xl shadow-2xl border-t border-gray-700">
+    <div id="settings-panel" class="fixed bottom-0 left-0 right-0 bg-[#252525] p-6 rounded-t-2xl shadow-2xl border-t border-gray-700 z-50">
         <div class="flex justify-between items-center mb-6">
-            <h2 class="text-lg font-bold">偏好设置</h2>
-            <button onclick="toggleSettings()" class="text-gray-400"><i class="fas fa-times"></i></button>
+            <h2 class="text-lg font-bold text-white">编辑器偏好</h2>
+            <button onclick="toggleSettings()" class="w-10 h-10 flex items-center justify-center text-gray-400 bg-white/5 rounded-full"><i class="fas fa-times"></i></button>
         </div>
         <div class="space-y-6">
-            <div class="flex justify-between items-center">
-                <span>缩进</span>
-                <select id="setting-indent" class="bg-[#333] px-3 py-1 rounded">
+            <div class="flex justify-between items-center text-sm">
+                <span>缩进空格</span>
+                <select id="setting-indent" class="bg-[#333] px-3 py-1 rounded border border-gray-600">
                     <option value="2" selected>2 空格</option>
                     <option value="4">4 空格</option>
                 </select>
             </div>
             <div class="space-y-2">
-                <div class="flex justify-between text-sm"><span>字号</span><span id="font-size-val">16px</span></div>
-                <input type="range" id="setting-fontsize" min="8" max="30" value="16" class="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                <div class="flex justify-between text-sm"><span>主字体大小</span><span id="font-size-val">16px</span></div>
+                <input type="range" id="setting-fontsize" min="10" max="24" value="16" class="w-full">
             </div>
-            <div class="flex justify-between items-center">
-                <span>语言</span>
-                <select id="setting-lang" class="bg-[#333] px-3 py-1 rounded">
-                    <option value="c" selected>C</option>
-                    <option value="cpp">C++</option>
-                </select>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-                <button onclick="setTheme('github-dark')" class="text-[10px] bg-[#0d1117] py-2 rounded border border-gray-700">GitHub Dark</button>
-                <button onclick="setTheme('monokai')" class="text-[10px] bg-[#272822] py-2 rounded border border-gray-700">Monokai</button>
-                <button onclick="setTheme('dracula')" class="text-[10px] bg-[#282a36] py-2 rounded border border-gray-700">Dracula</button>
-                <button onclick="setTheme('vs-dark')" class="text-[10px] bg-[#1e1e1e] py-2 rounded border border-gray-700">VS Dark</button>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="setTheme('github-dark')" class="text-[10px] bg-[#0d1117] py-3 rounded border border-gray-700 hover:border-blue-500">GitHub Dark</button>
+                <button onclick="setTheme('monokai')" class="text-[10px] bg-[#272822] py-3 rounded border border-gray-700 hover:border-blue-500">Monokai</button>
+                <button onclick="setTheme('dracula')" class="text-[10px] bg-[#282a36] py-3 rounded border border-gray-700 hover:border-blue-500">Dracula</button>
+                <button onclick="setTheme('vs-dark')" class="text-[10px] bg-[#1e1e1e] py-3 rounded border border-gray-700 hover:border-blue-500">VS Dark</button>
             </div>
         </div>
     </div>
@@ -253,26 +338,19 @@
         const textarea = document.getElementById('editor-textarea');
         const highlightLayer = document.getElementById('highlight-layer');
         const settingsPanel = document.getElementById('settings-panel');
+        const settingsOverlay = document.getElementById('settings-overlay');
+        const quickSlider = document.getElementById('quick-slider');
         
-        // 获取初始智能字号
-        function getSmartFontSize() {
-            const width = window.innerWidth;
-            if (width < 640) return 12;      // 手机
-            if (width < 1024) return 14;     // 平板
-            return 16;                       // 电脑
-        }
-
         let config = {
-            indentSize: 2,           // 默认 2
-            fontSize: getSmartFontSize(), // 智能检测初始字号
-            language: 'c',           // 默认 C
-            theme: 'github-dark',
+            indentSize: 2,
+            fontSize: 16,
             showParams: true,
             currentTarget: 'control',
+            activeInput: null,
             params: {
                 control: { width: 45, height: 36, radius: 4, fontSize: 13 },
                 symbol: { width: 34, height: 34, radius: 4, fontSize: 13 },
-                snippet: { width: 60, height: 32, radius: 4, fontSize: 12 }
+                snippet: { width: 68, height: 32, radius: 4, fontSize: 12 }
             }
         };
 
@@ -284,18 +362,16 @@
             initListeners();
             applyConfig();
             handleInput();
-            window.addEventListener('resize', () => {
-                updateKeyStyles();
-            });
+            document.getElementById('input-width').focus();
         };
 
         function initUI() {
-            const symbols = "#()[]{ }< >_&.->\"'*!=+-/\\%:;".split('');
+            const symbols = ["#", "(", ")", "[", "]", "{", "}", "<", ">", "_", "&", ".", "->", "\"", "'", "*", "!", "=", "+", "-", "/", "\\", "%", ":", ";"];
             const symbolArea = document.getElementById('symbol-area');
             symbolArea.innerHTML = '';
             symbols.forEach(s => {
                 const btn = document.createElement('div');
-                btn.className = 'key-btn symbol-key shrink-0';
+                btn.className = 'key-btn symbol-key';
                 btn.innerText = s;
                 btn.onclick = () => insertText(s);
                 symbolArea.appendChild(btn);
@@ -306,7 +382,7 @@
             snippetArea.innerHTML = '';
             snippets.forEach(snip => {
                 const btn = document.createElement('div');
-                btn.className = 'key-btn snippet-key px-2.5';
+                btn.className = 'key-btn snippet-key';
                 btn.innerText = snip;
                 btn.onclick = () => insertSnippet(snip);
                 snippetArea.appendChild(btn);
@@ -314,55 +390,64 @@
         }
 
         function initListeners() {
-            // 参数切换
             document.querySelectorAll('.radio-tag').forEach(tag => {
                 tag.onclick = function() {
                     document.querySelectorAll('.radio-tag').forEach(t => t.classList.remove('active'));
                     this.classList.add('active');
                     config.currentTarget = this.dataset.target;
                     syncInputValues();
+                    if (config.activeInput) updateSliderRange();
                 };
             });
 
-            // 输入监听
-            const inputs = {
-                'input-width': 'width',
-                'input-height': 'height',
-                'input-radius': 'radius',
-                'input-fontsize': 'fontSize'
-            };
-            Object.keys(inputs).forEach(id => {
-                document.getElementById(id).oninput = function() {
+            document.querySelectorAll('.param-input').forEach(input => {
+                input.onfocus = function() {
+                    config.activeInput = this;
+                    updateSliderRange();
+                };
+                input.oninput = function() {
+                    const prop = this.dataset.prop;
                     const val = parseInt(this.value) || 0;
-                    config.params[config.currentTarget][inputs[id]] = val;
+                    config.params[config.currentTarget][prop] = val;
                     updateKeyStyles();
+                    quickSlider.value = val;
                 };
             });
 
-            // CTRL + 滚轮缩放字号
-            window.addEventListener('wheel', (e) => {
-                if (e.ctrlKey) {
-                    e.preventDefault();
-                    const delta = e.deltaY > 0 ? -1 : 1;
-                    let newSize = config.fontSize + delta;
-                    if (newSize < 8) newSize = 8;
-                    if (newSize > 30) newSize = 30;
-                    
-                    config.fontSize = newSize;
-                    applyConfig();
-                }
-            }, { passive: false });
+            quickSlider.oninput = function() {
+                if (!config.activeInput) return;
+                const val = parseInt(this.value);
+                const prop = config.activeInput.dataset.prop;
+                config.activeInput.value = val;
+                config.params[config.currentTarget][prop] = val;
+                updateKeyStyles();
+            };
 
-            // 偏好设置监听
+            window.addEventListener('resize', updateKeyStyles);
+
             document.getElementById('setting-indent').onchange = (e) => {
                 config.indentSize = parseInt(e.target.value);
-                textarea.style.tabSize = config.indentSize;
-                highlightLayer.style.tabSize = config.indentSize;
+                applyConfig();
             };
-            document.getElementById('setting-lang').onchange = (e) => {
-                config.language = e.target.value;
-                updateLangIndicator();
+            
+            document.getElementById('setting-fontsize').oninput = (e) => { 
+                config.fontSize = parseInt(e.target.value); 
+                applyConfig(); 
             };
+        }
+
+        function updateSliderRange() {
+            if (!config.activeInput) return;
+            const prop = config.activeInput.dataset.prop;
+            const currentVal = config.params[config.currentTarget][prop];
+            let min = 5, max = 100;
+            if (prop === 'width') { min = 20; max = 200; }
+            else if (prop === 'height') { min = 15; max = 80; }
+            else if (prop === 'radius') { min = 0; max = 40; }
+            else if (prop === 'fontSize') { min = 8; max = 24; }
+            quickSlider.min = min;
+            quickSlider.max = max;
+            quickSlider.value = currentVal;
         }
 
         function syncInputValues() {
@@ -374,7 +459,6 @@
         }
 
         function updateKeyStyles() {
-            // 控制行
             const cp = config.params.control;
             document.querySelectorAll('.control-key').forEach(btn => {
                 if(!btn.id.includes('toggle')) btn.style.width = cp.width + 'px';
@@ -382,43 +466,20 @@
                 btn.style.borderRadius = cp.radius + 'px';
                 btn.style.fontSize = cp.fontSize + 'px';
             });
-
-            // 符号区 (Grid)
             const sp = config.params.symbol;
-            const container = document.getElementById('symbol-area');
-            if (container) {
-                const containerWidth = container.clientWidth;
-                const btnWidth = sp.width;
-                const minGap = 6;
-                const count = Math.floor((containerWidth + minGap) / (btnWidth + minGap));
-                container.style.gridTemplateColumns = `repeat(${count}, ${btnWidth}px)`;
-                container.style.columnGap = minGap + 'px';
-
-                document.querySelectorAll('.symbol-key').forEach(btn => {
-                    btn.style.width = sp.width + 'px';
-                    btn.style.height = sp.height + 'px';
-                    btn.style.borderRadius = sp.radius + 'px';
-                    btn.style.fontSize = sp.fontSize + 'px';
-                });
-            }
-
-            // 快捷代码
+            document.getElementById('symbol-area').style.setProperty('--btn-w', sp.width + 'px');
+            document.querySelectorAll('.symbol-key').forEach(btn => {
+                btn.style.height = sp.height + 'px';
+                btn.style.borderRadius = sp.radius + 'px';
+                btn.style.fontSize = sp.fontSize + 'px';
+            });
             const snp = config.params.snippet;
+            document.getElementById('snippet-area').style.setProperty('--snip-w', snp.width + 'px');
             document.querySelectorAll('.snippet-key').forEach(btn => {
-                btn.style.minWidth = snp.width + 'px';
                 btn.style.height = snp.height + 'px';
                 btn.style.borderRadius = snp.radius + 'px';
                 btn.style.fontSize = snp.fontSize + 'px';
             });
-        }
-
-        function updateLangIndicator() {
-            // 修复标题映射逻辑
-            const langMap = {
-                'c': 'C',
-                'cpp': 'C++'
-            };
-            document.getElementById('lang-indicator').innerText = langMap[config.language] || config.language.toUpperCase();
         }
 
         function applyConfig() {
@@ -426,22 +487,13 @@
             highlightLayer.style.fontSize = config.fontSize + 'px';
             textarea.style.tabSize = config.indentSize;
             highlightLayer.style.tabSize = config.indentSize;
-            
-            document.getElementById('setting-fontsize').value = config.fontSize;
             document.getElementById('font-size-val').innerText = config.fontSize + 'px';
-            document.getElementById('setting-lang').value = config.language;
-            document.getElementById('setting-indent').value = config.indentSize;
-            
-            updateLangIndicator();
             syncInputValues();
             updateKeyStyles();
         }
 
-        // --- 编辑器核心逻辑 ---
         function highlight(code) {
-            const keywords = /\b(if|else|switch|case|default|while|do|for|break|continue|return|goto|sizeof|typedef|struct|union|enum|extern|static|const|volatile|inline|restrict|include|define|undef|ifdef|ifndef|endif)\b/g;
-            const types = /\b(int|char|float|double|void|long|short|signed|unsigned|bool|string|vector|std|auto)\b/g;
-            const functions = /\b([a-zA-Z_]\w*)(?=\s*\()/g;
+            const keywords = /\b(if|else|switch|case|default|while|do|for|break|continue|return|sizeof|typedef|struct|include|define|int|char|float|double|void|long|auto|std|vector|bool)\b/g;
             const strings = /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g;
             const comments = /\/\/.+?(\n|$)|(\/\*[\s\S]*?\*\/)/g;
             const numbers = /\b\d+(\.\d+)?\b/g;
@@ -449,8 +501,6 @@
             html = html.replace(comments, m => `<span class="hl-comment">${m}</span>`);
             html = html.replace(strings, m => `<span class="hl-str">${m}</span>`);
             html = html.replace(keywords, m => `<span class="hl-kw">${m}</span>`);
-            html = html.replace(types, m => `<span class="hl-type">${m}</span>`);
-            html = html.replace(functions, m => `<span class="hl-func">${m}</span>`);
             html = html.replace(numbers, m => `<span class="hl-num">${m}</span>`);
             return html + "\n";
         }
@@ -462,8 +512,7 @@
             if (history[historyIdx] !== code) {
                 history = history.slice(0, historyIdx + 1);
                 history.push(code);
-                if (history.length > 50) history.shift();
-                else historyIdx++;
+                if (history.length > 50) history.shift(); else historyIdx++;
             }
         }
 
@@ -474,36 +523,6 @@
 
         textarea.oninput = handleInput;
         textarea.onscroll = syncScroll;
-        textarea.onkeydown = function(e) {
-            const start = this.selectionStart;
-            const val = this.value;
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const lines = val.substring(0, start).split('\n');
-                const lastLine = lines[lines.length - 1];
-                const indent = lastLine.match(/^\s*/)[0];
-                let extraIndent = "";
-                const lastChar = lastLine.trim().slice(-1);
-                if (lastChar === '{') {
-                    extraIndent = " ".repeat(config.indentSize);
-                    if (val[start] === '}') {
-                        insertAtCursor("\n" + indent + extraIndent + "\n" + indent);
-                        this.selectionStart = this.selectionEnd = start + 1 + indent.length + extraIndent.length;
-                        handleInput();
-                        return;
-                    }
-                }
-                insertAtCursor("\n" + indent + extraIndent);
-                handleInput();
-            }
-            const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
-            if (pairs[e.key]) {
-                e.preventDefault();
-                insertAtCursor(e.key + pairs[e.key]);
-                this.selectionStart = this.selectionEnd = start + 1;
-                handleInput();
-            }
-        };
 
         function insertAtCursor(text) {
             const start = textarea.selectionStart;
@@ -515,66 +534,45 @@
 
         function insertText(text) { insertAtCursor(text); textarea.focus(); handleInput(); }
         function insertTab() { insertText(" ".repeat(config.indentSize)); }
-        
-        function insertSnippet(type) {
-            let text = ""; let offset = 0;
-            switch(type) {
-                case 'include': 
-                    text = config.language === 'cpp' ? "#include <iostream>\n" : "#include <stdio.h>\n"; 
-                    break;
-                case 'define': text = "#define "; break;
-                case 'if': text = "if () {\n    \n}"; offset = -9; break;
-                case 'else': text = "else {\n    \n}"; offset = -2; break;
-                case 'for': text = "for (int i = 0; i < n; i++) {\n    \n}"; offset = -26; break;
-                case 'while': text = "while () {\n    \n}"; offset = -12; break;
-                case 'return': text = "return 0;"; break;
-                case 'main': 
-                    text = config.language === 'cpp' ? 
-                        "#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}" : 
-                        "#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}";
-                    offset = -15; break;
-                default: text = type + " ";
-            }
-            insertAtCursor(text);
-            textarea.selectionStart = textarea.selectionEnd += offset;
-            textarea.focus();
-            handleInput();
-        }
-
         function undo() { if (historyIdx > 0) { historyIdx--; textarea.value = history[historyIdx]; handleInput(); } }
         function redo() { if (historyIdx < history.length - 1) { historyIdx++; textarea.value = history[historyIdx]; handleInput(); } }
+        
         function toggleParamArea() {
             config.showParams = !config.showParams;
-            document.getElementById('param-adjusters').classList.toggle('hidden-element', !config.showParams);
-            document.getElementById('toggle-params-btn').classList.toggle('bg-blue-900/40', config.showParams);
-            setTimeout(updateKeyStyles, 50);
+            const area = document.getElementById('param-adjusters');
+            area.style.maxHeight = config.showParams ? '200px' : '0';
+            area.style.opacity = config.showParams ? '1' : '0';
+            area.style.borderBottomWidth = config.showParams ? '1px' : '0';
+            area.style.marginBottom = config.showParams ? '0.75rem' : '0';
         }
+
         function toggleMainArea() {
-            const sym = document.getElementById('symbol-area');
-            const snp = document.getElementById('snippet-area');
-            const icon = document.getElementById('fold-icon');
-            const isHidden = sym.classList.contains('hidden-element');
-            sym.classList.toggle('hidden-element', !isHidden);
-            snp.classList.toggle('hidden-element', !isHidden);
-            icon.className = isHidden ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
-            if(!isHidden) setTimeout(updateKeyStyles, 50);
+            const main = document.getElementById('foldable-main');
+            const isCollapsed = main.classList.toggle('collapsed');
+            document.getElementById('fold-icon').className = isCollapsed ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
         }
-        function toggleSettings() { settingsPanel.classList.toggle('active'); }
-        function setTheme(theme) { document.body.className = 'theme-' + theme; }
-        document.getElementById('setting-fontsize').oninput = (e) => { 
-            config.fontSize = parseInt(e.target.value); 
-            applyConfig(); 
-        };
+
+        function toggleSettings() { 
+            settingsPanel.classList.toggle('active'); 
+            settingsOverlay.classList.toggle('active');
+        }
+
+        function setTheme(theme) { 
+            document.body.className = 'theme-' + theme; 
+            toggleSettings();
+        }
+        
         function copyCode() { textarea.select(); document.execCommand('copy'); }
-        function clearAll() { if (confirm("清空代码？")) { textarea.value = ""; handleInput(); } }
-        function downloadFile(type) {
-            let filename = "main." + (type === 'txt' ? 'txt' : (config.language === 'cpp' ? 'cpp' : 'c'));
-            const blob = new Blob([textarea.value], {type: "text/plain"});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
-        }
-        function exportParams() {
-            const blob = new Blob([JSON.stringify(config, null, 2)], {type: "application/json"});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "editor-config.json"; a.click();
+        function clearAll() { if (confirm("确定要清空所有代码吗？")) { textarea.value = ""; handleInput(); } }
+
+        function insertSnippet(type) {
+            let text = "";
+            switch(type) {
+                case 'include': text = "#include <stdio.h>\n"; break;
+                case 'main': text = "int main() {\n    \n    return 0;\n}"; break;
+                default: text = type + " ";
+            }
+            insertAtCursor(text); textarea.focus(); handleInput();
         }
     </script>
 </body>
