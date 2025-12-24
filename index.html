@@ -159,13 +159,17 @@
         .foldable-content {
             max-height: 1000px;
             overflow: hidden;
-            transition: max-height 0.3s cubic-bezier(0, 1, 0, 1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .foldable-content.collapsed {
             max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-top: 0;
+            margin-bottom: 0;
         }
 
-        /* 响应式参数调节区布局 */
         .param-adjuster-container {
             display: flex;
             flex-direction: column;
@@ -178,53 +182,56 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 12px;
+            gap: 8px;
             width: 100%;
         }
 
-        /* 移动端 (默认) */
         @media (max-width: 767px) {
-            .slider-inputs-group {
-                max-width: 280px; /* 限制宽度使滑动条与按钮组接近 1:1 或比例协调 */
-            }
-            #quick-slider {
-                flex: 1; /* 滑动条占据左侧剩余空间 */
-            }
+            .slider-inputs-group { max-width: 320px; }
+            #quick-slider { flex: 1; }
         }
 
-        /* 桌面端 */
         @media (min-width: 768px) {
-            .param-adjuster-container {
-                flex-direction: row;
-                justify-content: space-between;
-            }
-            .slider-inputs-group {
-                width: auto;
-                justify-content: flex-end;
-            }
-            #quick-slider {
-                width: 140px;
-            }
+            .param-adjuster-container { flex-direction: row; justify-content: space-between; }
+            .slider-inputs-group { width: auto; justify-content: flex-end; gap: 16px; }
+            #quick-slider { width: 140px; }
         }
 
-        /* 设置面板修复 */
         #settings-panel {
             transform: translateY(100%);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        #settings-panel.active {
-            transform: translateY(0);
+        #settings-panel.active { transform: translateY(0); }
+        #settings-overlay { display: none; z-index: 40; }
+        #settings-overlay.active { display: block; }
+
+        #snippet-toggle-icon { cursor: pointer; transition: color 0.2s; }
+        #snippet-toggle-icon:hover { color: #3b82f6; }
+
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(59, 130, 246, 0.95);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: bold;
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
         }
-        #settings-overlay {
-            display: none;
-            z-index: 40;
-        }
-        #settings-overlay.active {
-            display: block;
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
         }
     </style>
 </head>
 <body class="theme-github-dark">
+
+    <div id="toast">代码已复制到剪贴板</div>
 
     <header class="h-14 bg-[#1a1a1a] flex items-center justify-between px-4 border-b border-gray-800 shrink-0">
         <div class="flex items-center space-x-2">
@@ -232,9 +239,10 @@
             <span id="lang-indicator" class="font-bold text-sm text-gray-300">C</span>
         </div>
         <div class="flex items-center space-x-4 text-lg text-gray-400">
-            <button onclick="copyCode()"><i class="far fa-copy"></i></button>
-            <button onclick="clearAll()"><i class="fas fa-trash-alt"></i></button>
-            <button onclick="toggleSettings()"><i class="fas fa-cog"></i></button>
+            <button onclick="copyCode()" title="复制代码"><i class="far fa-copy"></i></button>
+            <button id="download-btn" title="下载"><i class="fas fa-download"></i></button>
+            <button onclick="clearAll()" title="清空代码"><i class="fas fa-trash-alt"></i></button>
+            <button onclick="toggleSettings()" title="设置"><i class="fas fa-cog"></i></button>
         </div>
     </header>
 
@@ -244,23 +252,19 @@
     </main>
 
     <div id="accessory-bar" class="accessory-bar p-3">
-        <!-- 响应式参数调节区 -->
-        <div id="param-adjusters" class="pb-3 border-b border-gray-800 mb-3 overflow-hidden transition-all duration-300">
-            <div class="param-adjuster-container">
-                
-                <!-- 手机端居中 / 桌面端居左 -->
+        <!-- 参数调节区域 -->
+        <div id="param-adjusters" class="max-h-0 opacity-0 overflow-hidden transition-all duration-300">
+            <div class="param-adjuster-container pb-3 border-b border-gray-800 mb-3">
                 <div id="target-selector" class="flex space-x-1 shrink-0">
                     <div class="radio-tag active" data-target="control">控制行</div>
                     <div class="radio-tag" data-target="symbol">符号矩阵</div>
                     <div class="radio-tag" data-target="snippet">快捷代码</div>
                 </div>
 
-                <!-- 组合体：滑动条(左) + 按钮组(右) -> 整体居中 -->
                 <div class="slider-inputs-group">
                     <div class="flex-grow flex items-center">
                         <input type="range" id="quick-slider" class="w-full" min="0" max="100" value="0">
                     </div>
-
                     <div class="flex space-x-1 text-[10px] shrink-0">
                         <div class="flex flex-col items-center">
                             <span class="text-gray-500 mb-0.5 scale-90">宽</span>
@@ -280,15 +284,19 @@
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
 
+        <!-- 辅助栏核心控制行 -->
         <div id="control-line" class="flex justify-between items-center mb-2">
             <div class="flex space-x-2">
                 <div class="key-btn control-key w-12 h-9 text-xs font-bold shrink-0" onclick="insertTab()">Tab</div>
                 <div id="toggle-params-btn" class="key-btn control-key w-10 h-9 bg-blue-900/40 text-blue-400 shrink-0" onclick="toggleParamArea()">
                     <i class="fas fa-sliders-h"></i>
+                </div>
+                <!-- 眼睛按钮已移至参数设置按钮右边 -->
+                <div id="snippet-eye-wrapper" class="flex items-center ml-1">
+                    <i id="snippet-toggle-icon" class="fas fa-eye text-gray-400 text-lg p-2" onclick="toggleSnippetVisibility()" title="切换快捷代码显示"></i>
                 </div>
             </div>
             <div class="flex space-x-2">
@@ -304,10 +312,8 @@
         </div>
     </div>
 
-    <!-- 遮罩层 -->
     <div id="settings-overlay" class="fixed inset-0 bg-black/60" onclick="toggleSettings()"></div>
 
-    <!-- 设置面板 -->
     <div id="settings-panel" class="fixed bottom-0 left-0 right-0 bg-[#252525] p-6 rounded-t-2xl shadow-2xl border-t border-gray-700 z-50">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-lg font-bold text-white">编辑器偏好</h2>
@@ -340,11 +346,13 @@
         const settingsPanel = document.getElementById('settings-panel');
         const settingsOverlay = document.getElementById('settings-overlay');
         const quickSlider = document.getElementById('quick-slider');
+        const toast = document.getElementById('toast');
         
         let config = {
             indentSize: 2,
             fontSize: 16,
-            showParams: true,
+            showParams: false,
+            showSnippetArea: true,
             currentTarget: 'control',
             activeInput: null,
             params: {
@@ -362,7 +370,6 @@
             initListeners();
             applyConfig();
             handleInput();
-            document.getElementById('input-width').focus();
         };
 
         function initUI() {
@@ -401,10 +408,7 @@
             });
 
             document.querySelectorAll('.param-input').forEach(input => {
-                input.onfocus = function() {
-                    config.activeInput = this;
-                    updateSliderRange();
-                };
+                input.onfocus = function() { config.activeInput = this; updateSliderRange(); };
                 input.oninput = function() {
                     const prop = this.dataset.prop;
                     const val = parseInt(this.value) || 0;
@@ -424,16 +428,21 @@
             };
 
             window.addEventListener('resize', updateKeyStyles);
+            document.getElementById('setting-indent').onchange = (e) => { config.indentSize = parseInt(e.target.value); applyConfig(); };
+            document.getElementById('setting-fontsize').oninput = (e) => { config.fontSize = parseInt(e.target.value); applyConfig(); };
+        }
 
-            document.getElementById('setting-indent').onchange = (e) => {
-                config.indentSize = parseInt(e.target.value);
-                applyConfig();
-            };
-            
-            document.getElementById('setting-fontsize').oninput = (e) => { 
-                config.fontSize = parseInt(e.target.value); 
-                applyConfig(); 
-            };
+        function toggleSnippetVisibility() {
+            config.showSnippetArea = !config.showSnippetArea;
+            const snipArea = document.getElementById('snippet-area');
+            const eyeIcon = document.getElementById('snippet-toggle-icon');
+            if (config.showSnippetArea) {
+                snipArea.style.display = 'grid';
+                eyeIcon.className = 'fas fa-eye text-blue-400 text-lg p-2';
+            } else {
+                snipArea.style.display = 'none';
+                eyeIcon.className = 'fas fa-eye-slash text-gray-600 text-lg p-2';
+            }
         }
 
         function updateSliderRange() {
@@ -445,9 +454,7 @@
             else if (prop === 'height') { min = 15; max = 80; }
             else if (prop === 'radius') { min = 0; max = 40; }
             else if (prop === 'fontSize') { min = 8; max = 24; }
-            quickSlider.min = min;
-            quickSlider.max = max;
-            quickSlider.value = currentVal;
+            quickSlider.min = min; quickSlider.max = max; quickSlider.value = currentVal;
         }
 
         function syncInputValues() {
@@ -540,10 +547,13 @@
         function toggleParamArea() {
             config.showParams = !config.showParams;
             const area = document.getElementById('param-adjusters');
-            area.style.maxHeight = config.showParams ? '200px' : '0';
-            area.style.opacity = config.showParams ? '1' : '0';
-            area.style.borderBottomWidth = config.showParams ? '1px' : '0';
-            area.style.marginBottom = config.showParams ? '0.75rem' : '0';
+            if (config.showParams) {
+                area.style.maxHeight = '200px'; area.style.opacity = '1';
+                area.style.marginTop = '0.5rem'; area.style.marginBottom = '0.75rem';
+            } else {
+                area.style.maxHeight = '0'; area.style.opacity = '0';
+                area.style.marginTop = '0'; area.style.marginBottom = '0';
+            }
         }
 
         function toggleMainArea() {
@@ -557,12 +567,23 @@
             settingsOverlay.classList.toggle('active');
         }
 
-        function setTheme(theme) { 
-            document.body.className = 'theme-' + theme; 
-            toggleSettings();
-        }
+        function setTheme(theme) { document.body.className = 'theme-' + theme; toggleSettings(); }
         
-        function copyCode() { textarea.select(); document.execCommand('copy'); }
+        function copyCode() {
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+            try {
+                if (document.execCommand('copy')) showToast();
+            } catch (err) {}
+            textarea.setSelectionRange(textarea.selectionEnd, textarea.selectionEnd);
+            textarea.blur();
+        }
+
+        function showToast() {
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 2000);
+        }
+
         function clearAll() { if (confirm("确定要清空所有代码吗？")) { textarea.value = ""; handleInput(); } }
 
         function insertSnippet(type) {
