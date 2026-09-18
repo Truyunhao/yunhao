@@ -1,0 +1,752 @@
+/* ==========================================================================
+   液态玻璃 · 新标签页  —  主界面样式
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+/* body 在启动期间是透明的，这里给 html 一个底色，避免淡入时闪出浏览器白底 */
+html { background: #0b0d13; }
+
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #0b0d13;
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  transition: opacity .2s ease;
+}
+
+/* ===== 启动遮罩 =====
+   设置与壁纸是从 chrome.storage 异步读出来的（壁纸还是几 MB 的 DataURL）。
+   若先按默认值画一帧、再被存档覆盖，就会看到"画面被重新生成"的割裂感。
+   所以在首帧应用完成前不绘制整页，完成后淡入 —— 用户只会看到一次成形的结果。 */
+html.booting body { opacity: 0; }
+/* 启动期间禁用一切过渡：--time-top / --links-w 这些属性上挂着 transition，
+   一旦 JS 写入的值和第一帧不同，过渡会"带着页面滑过去"（这正是刷新时
+   时间区/搜索区/按钮区发生位移的原因）。这里直接禁掉，等摘掉 .booting 时
+   所有值早已是最终值，也就没有任何可动画的变化了。 */
+html.booting * { transition: none !important; animation: none !important; }
+@media (prefers-reduced-motion: reduce) { body { transition: none; } }
+
+/* ===== 主题变量 ===== */
+:root {
+  /* 文字 */
+  --fg:        #ffffff;
+  --fg-2:      rgba(255, 255, 255, .72);
+  --fg-3:      rgba(255, 255, 255, .45);
+
+  /* 玻璃 */
+  --glass-bg:     rgba(255, 255, 255, .10);
+  --glass-border: rgba(255, 255, 255, .22);
+  --glass-blur:   18px;
+  --glass-sat:    160%;
+  --glint-a:      .45;
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, .30);
+  --hover-bg:     rgba(255, 255, 255, .16);
+  --accent:       #6c8cff;
+  --accent-soft:  rgba(108, 140, 255, .28);
+  --vignette:     radial-gradient(120% 120% at 50% 0%, rgba(0,0,0,0) 42%, rgba(0,0,0,.34) 100%);
+
+  /* 布局参数（由 JS 注入）
+     ⚠️ 这里的兜底值必须与 app.js 的 defaultData() 完全一致。
+     设置是从 chrome.storage 异步读的，在 JS 写值之前，第一帧用的就是这里的值；
+     如果和真实默认值不同，第一帧画完再被覆盖就会看到"整块区域在动"。 */
+  --links-w:   1200px;
+  --btn-w:     126px;   /* 按钮最小宽度：grid 的 minmax() 下限，按钮实际会撑满列宽 */
+  --btn-h:     50px;
+  --btn-r:     10px;
+  --icon-r:    50%;
+  --btn-gap:   14px;
+  --btn-align: flex-start;   /* flex-start=内容靠左，center=居中 */
+  --time-top:  9vh;
+  --search-top: 6vh;
+  --links-top: 9vh;
+
+  /* 时间 */
+  --time-size:   96px;
+  --time-weight: 700;
+  --time-letter: 0px;
+  --time-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --time-color: #ffffff;
+  --time-shadow: 0 4px 30px rgba(0, 0, 0, .38);
+
+  /* 弹层（设置面板 / 弹窗）*/
+  --panel-bg:      rgba(18, 20, 27, .955);
+  --panel-fg:      #eef1f7;
+  --panel-fg-dim:  rgba(238, 241, 247, .62);
+  --panel-border:  rgba(255, 255, 255, .12);
+  /* 弹层的「材质」三件套：投影 / 内高光 / 模糊。
+     抽成变量，是为了让「液态玻璃」主题下把设置面板、弹窗、轻提示整体换成
+     与主页面同一套玻璃材质（三档覆盖量见下方主题材质规则）。 */
+  --panel-shadow:  0 40px 90px rgba(0, 0, 0, .48);
+  --panel-inner:   inset 0 1px 0 rgba(255, 255, 255, .28);
+  --panel-glint:   0 0 #0000;
+  --panel-blur:    blur(34px) saturate(180%);
+  --toast-shadow:  0 16px 40px rgba(0, 0, 0, .42);
+  --mask-bg:       rgba(6, 8, 14, .5);
+  --card-bg:       rgba(255, 255, 255, .05);
+  --card-border:   rgba(255, 255, 255, .08);
+  --ctrl-bg:       rgba(255, 255, 255, .07);
+  --ctrl-border:   rgba(255, 255, 255, .14);
+  --switch-off:    rgba(255, 255, 255, .18);
+}
+
+/* 明亮界面：背景偏亮时自动切换 */
+body.ui-light {
+  --fg:        #14161d;
+  --fg-2:      rgba(20, 22, 29, .70);
+  --fg-3:      rgba(20, 22, 29, .45);
+  --glass-bg:     rgba(255, 255, 255, .30);
+  --glass-border: rgba(20, 26, 44, .10);
+  --glint-a:      .75;
+  --glass-shadow: 0 10px 30px rgba(28, 38, 66, .14);
+  --hover-bg:     rgba(255, 255, 255, .52);
+  --accent:       #3d63e8;
+  --vignette:     radial-gradient(120% 120% at 50% 0%, rgba(255,255,255,0) 45%, rgba(255,255,255,.30) 100%);
+  --panel-bg:      rgba(250, 251, 255, .96);
+  --panel-fg:      #191c24;
+  --panel-fg-dim:  rgba(25, 28, 36, .60);
+  --panel-border:  rgba(20, 26, 44, .10);
+  /* 浅色主题：面板投影更轻、内高光更白，避免"黑乎乎的厚边框" */
+  --panel-shadow:  0 30px 70px rgba(28, 38, 66, .22);
+  --panel-inner:   inset 0 1px 0 rgba(255, 255, 255, .9);
+  --toast-shadow:  0 14px 34px rgba(28, 38, 66, .20);
+  --mask-bg:       rgba(28, 38, 66, .30);
+  --card-bg:       rgba(15, 22, 45, .045);
+  --card-border:   rgba(15, 22, 45, .07);
+  --ctrl-bg:       rgba(15, 22, 45, .05);
+  --ctrl-border:   rgba(15, 22, 45, .12);
+  --switch-off:    rgba(20, 26, 44, .18);
+}
+
+/* ===== 「液态玻璃」主题：设置等三页与 .panel-head 用【同一份】玻璃配方 =====
+   .panel-head 上那条玻璃条（.tab-nav.glass）是：
+     底色 --glass-bg + 1px --glass-border + blur(--glass-blur) saturate(--glass-sat)
+     + 四条内高光 + --glass-shadow。
+   而设置页 / 设置液态玻璃效果页 / 选择壁纸页在 light · dark 主题下是一块近乎不透明的
+   实心面板 —— 选中「液态玻璃」时两边就画风分家。这里让面板直接引用同一批变量，
+   于是它们永远是同一块材料，改一处两边一起变。
+
+   ⚠️ 底色写 var(--glass-bg) 而不是写死某个颜色：--glass-bg 会随「明亮壁纸」
+   （body.ui-light）自动切成白纱/深纱，而面板文字色 --panel-fg 也跟着 ui-light 一起翻，
+   所以亮壁纸下是"白玻璃 + 深字"、暗壁纸下是"深玻璃 + 浅字"，两边都不会糊。
+   面板自己带真 border，所以这里不再叠 `0 0 0 1px` 那条描边环。
+   必须排在 body.ui-light 之后：特异性相同（0,1,1），靠源码顺序决胜。 */
+body[data-theme="liquid"] {
+  --panel-bg:     var(--glass-bg);
+  --panel-border: var(--glass-border);
+  --panel-blur:   blur(var(--glass-blur)) saturate(var(--glass-sat));
+  /* 四边内高光由 --panel-glint 全权负责，掐掉通用的那条顶高光，
+     否则顶边会叠成 .95 + .28 两道，就不再是 .panel-head 的那一份配方了 */
+  --panel-inner:  0 0 #0000;
+  /* 与 .glass 完全同形的四条内高光（同样吃 --glint-a） */
+  --panel-glint:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .95)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .30)),
+    inset 1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55)),
+    inset -1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55));
+  /* 外投影同样用主页面那条 */
+  --panel-shadow: var(--glass-shadow);
+}
+
+/* ===== 背景 ===== */
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-color: #10131c;
+  background-image: var(--bg-image, linear-gradient(135deg, #0f1220, #1a1a2e 40%, #16213e 70%, #0f3460));
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+/* 动态壁纸层。与 .bg-layer 同为 z-index:0，但排在它后面 → 画在静态底图之上、
+   暗角（.bg-vignette）之下。object-fit:cover 与 .bg-layer 的 background-size:cover
+   同一套铺法，所以"折射帧拷贝"用同样的 cover 数学裁切就能严格对齐。 */
+.bg-video {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  background: #0b0d13;
+  display: none;
+}
+.bg-video.on { display: block; }
+
+.bg-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--vignette);
+}
+
+/* ===== 玻璃基底 ===== */
+.glass {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .95)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .30)),
+    inset 1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55)),
+    inset -1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55)),
+    var(--glass-shadow);
+}
+
+/* 折射层由 JS 注入 */
+.glass-refract {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.glass-refract-bg {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-color: transparent;
+}
+.glass-refract-tint {
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+/* 让玻璃内容浮在折射层之上。
+   注意：必须排除绝对定位的覆盖层（.link-actions 等），
+   否则这里的 position:relative 会以更高优先级压掉它们自己的 position:absolute，
+   导致覆盖层退回文档流、撑乱图标布局。 */
+.glass > *:not(.glass-refract):not(.link-actions) { position: relative; z-index: 1; }
+.glass > .link-actions { z-index: 5; }
+
+/* ===== 导航条 / 搜索引擎上的「液态玻璃」次级玻璃 =====
+   .tab-item、.engine-btn、.engine-switcher 的交互态与设置页里的液态玻璃
+   （.glass 那一套）保持一致：底色 + 模糊 + **折射层**（由 JS 挂进折射引擎），
+   材质语言和主页面上的玻璃完全同一套。
+
+   与 .glass 只有两处刻意的差别：
+   1) 不用真 border —— .glass 的 1px 真边会让元素凭空长高 2px，
+      分类条/搜索框会被顶高、下方整摞内容跟着位移。这里的描边交给
+      box-shadow 的 `0 0 0 1px`（不占布局），正好也是「高光」的一部分。
+   2) 折射层默认 opacity:0，只有 hover / 选中才显形 ——
+      没被选中的分类要保持朴素，不然每个标签都顶着一个小气泡。
+
+   「高光显示」开关（body.glint-off）掐掉那一圈描边 + 四条 inset 高光，
+   作用于 .tab-item / .engine-btn / .engine-switcher 三者（都走 --nav-glint），
+   用变量做是为了避开和 .tab-item.drag-over 的落点圈打架（见下）。 */
+:root {
+  /* 高光：1px 描边 + 轻微外投影 + 四边内高光。关掉时整条置空 */
+  --nav-glint:
+    0 0 0 1px var(--glass-border),
+    0 2px 8px rgba(0, 0, 0, .14),
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .95)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .30)),
+    inset 1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55)),
+    inset -1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55));
+}
+body.glint-off { --nav-glint: 0 0 #0000; }
+
+/* 承载折射层的前提：定位 + 裁剪 + 内容浮在折射层之上 */
+.tab-item,
+.engine-btn,
+.engine-switcher {
+  position: relative;
+  overflow: hidden;
+}
+.tab-item > *:not(.glass-refract),
+.engine-btn > *:not(.glass-refract),
+.engine-switcher > *:not(.glass-refract) { position: relative; z-index: 1; }
+
+/* 底色 + 模糊 + 高光。.engine-switcher 是常驻容器（一直就是玻璃），
+   另两个只在 hover / 选中时显形。三者统一吃 --nav-glint，
+   所以「高光显示」开关对它们是一起生效的。 */
+.tab-item:hover, .tab-item.active,
+.engine-btn:hover, .engine-btn.active,
+.engine-switcher {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: var(--nav-glint);
+}
+
+/* 折射层：只在"确实是玻璃"的那两个状态显形 */
+.tab-item .glass-refract,
+.engine-btn .glass-refract { opacity: 0; transition: opacity .2s ease; }
+.tab-item:hover .glass-refract, .tab-item.active .glass-refract,
+.engine-btn:hover .glass-refract, .engine-btn.active .glass-refract { opacity: 1; }
+
+/* 图标按钮（工具条）悬浮：同样给一圈高光，但**不**受「高光显示」开关影响 ——
+   那个开关按需求只作用在 .tab-item / .engine-btn / .engine-switcher 上。 */
+.icon-btn:hover {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow:
+    0 0 0 1px var(--glass-border),
+    0 2px 8px rgba(0, 0, 0, .14),
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .95)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .30)),
+    inset 1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55)),
+    inset -1px 0 0 rgba(255, 255, 255, calc(var(--glint-a) * .55));
+}
+
+/* ===== 设置按钮 ===== */
+.settings-btn {
+  position: fixed;
+  top: 26px;
+  right: 26px;
+  z-index: 300;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg);
+  transition: transform .28s cubic-bezier(.2, .9, .3, 1.2), box-shadow .28s ease;
+}
+/* 悬浮只提亮，不缩放/旋转 */
+.settings-btn:hover { filter: brightness(1.12); }
+.settings-btn:active { transform: scale(.96); }
+.settings-btn svg { width: 22px; height: 22px; fill: currentColor; opacity: .92; }
+.settings-btn.active {
+  transform: scale(1.06) rotate(28deg);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ===== 主容器 ===== */
+.main {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  /* stretch：让各模块能撑到 max-width 指定宽度，再靠 auto 外边距居中 */
+  align-items: stretch;
+  padding: 0 24px 0;
+  scrollbar-width: none;
+}
+.main::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ===== 时间模块 ===== */
+.time-module {
+  margin-top: var(--time-top);
+  align-self: center;
+  text-align: center;
+  flex-shrink: 0;
+  transition: margin-top .3s ease;
+}
+.time-module.hidden { display: none; }
+
+.time-display {
+  font-family: var(--time-font);
+  font-size: var(--time-size);
+  font-weight: var(--time-weight);
+  letter-spacing: var(--time-letter);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.02;
+  color: var(--time-color);
+  text-shadow: var(--time-shadow);
+  transition: color .35s ease, text-shadow .35s ease, font-size .2s ease;
+}
+.time-date {
+  margin-top: .35em;
+  font-family: var(--time-font);
+  font-size: max(13px, calc(var(--time-size) * .17));
+  font-weight: 500;
+  letter-spacing: .06em;
+  color: var(--time-color);
+  opacity: .9;
+  text-shadow: var(--time-shadow);
+  transition: color .35s ease;
+}
+
+/* ===== 搜索模块 ===== */
+.search-module {
+  margin-top: var(--search-top);
+  width: 100%;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  flex-shrink: 0;
+  transition: margin-top .3s ease;
+}
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 18px;
+  border-radius: 999px;
+  transition: box-shadow .28s ease, background .28s ease;
+}
+/* 聚焦只做光影变化，不做缩放位移 */
+.search-box:focus-within {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--glint-a) * 1.2)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--glint-a) * .35)),
+    0 14px 44px rgba(0, 0, 0, .32);
+}
+.search-icon { display: flex; flex-shrink: 0; opacity: .55; }
+.search-icon svg { width: 17px; height: 17px; fill: currentColor; }
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 9px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  /* 输入文字颜色由 JS 按搜索框自身底色的合成亮度决定（--search-fg） */
+  color: var(--search-fg, var(--fg));
+  font-size: 15px;
+  font-family: inherit;
+  /* 输入文字用细体（300）—— 与右侧引擎按钮的 500/600 拉开层次，
+     玻璃底上细字更"轻"，也更容易和占位文案区分。 */
+  font-weight: 300;
+  letter-spacing: .01em;
+}
+.search-input::placeholder { color: transparent; }
+
+/* 搜索引擎切换：整块容器恒为液态玻璃胶囊（底色/模糊/高光/折射层见文件上方共用规则）。
+   这里刻意**不加 .glass 类** —— .glass 带 1px 真 border，会在 .search-box 里
+   凭空长 2px 高度，把下方整摞内容顶下去；玻璃观感交给上面的共用规则即可。 */
+.engine-switcher {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.engine-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease;
+}
+/* 悬浮/选中都用玻璃胶囊（见上方 .engine-btn:hover / .active），不再用实色填充 */
+.engine-btn:hover { color: var(--fg); }
+.engine-btn.active { font-weight: 600; }
+
+/* ===== 链接按钮面板 ===== */
+
+/* 面板容器：与搜索框之间留 --links-top，各面板之间固定 22px */
+.panels {
+  width: 100%;
+  margin-top: var(--links-top);
+  flex-shrink: 0;
+  padding-bottom: 72px;
+  transition: margin-top .3s ease;
+}
+
+.links-module {
+  width: 100%;
+  max-width: var(--links-w);
+  margin-left: auto;
+  margin-right: auto;
+  transition: max-width .3s ease;
+}
+.links-module + .links-module { margin-top: 22px; }
+
+/* 面板头 = 分类导航条（占满 .links-module 宽度）+ 右【外】侧的面板级操作条。
+
+   ⚠️ 操作条（上移 / 下移 / 新增面板 / 删除此面板）必须绝对定位，不能参与 flex 布局：
+   它是按需显隐的（第一层不显示"上移"，只有一个面板时不显示"删除此面板"），
+   一旦占布局宽度，导航条的宽度就会随按钮个数变化 —— 导航条右边缘因此永远对不上
+   下方链接网格的右边缘（差 52px / 157px 不等），怎么调都"无法对齐"。
+   改成绝对定位后：.tab-nav 恒等于 .links-module 宽度，右边缘与 .links-grid 严格重合。
+
+   ⚠️ 操作条挂在导航条【外面】右侧 3px（见 .nav-side 的 right）：
+   那 3px 空隙落在 .panel-head 的盒外，指针从导航条往右滑过去时会经过一段"无人区"，
+   hover 瞬时丢失（操作条 opacity 立刻回落、pointer-events 变 none），
+   表现就是"手一滑过去条子就消失、点不到"。下面这条 ::after 悬停桥把空隙补成
+   .panel-head 自己的区域 —— 指针落在桥上同样算 .panel-head:hover，滑动过程不断。
+   既然操作条已经在导航条外面，.tab-nav 就【不需要】再为它留右内边距了。 */
+.panel-head {
+  position: relative;
+  margin-bottom: 18px;
+}
+/* 悬停桥：只铺满那 3px 空隙，不越过操作条左边缘 → 不会抢走它按钮的点击。
+   绝对定位、不占布局 → 导航条宽度仍恒等于 .links-module 宽度。 */
+.panel-head::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 3px;
+}
+
+/* 兜底（.side-inside）：视口右侧实在放不下这条"外挂"操作条时把它收回导航条内部。
+   什么时候会放不下？「区域宽度」被容器夹住的时候 —— 此时 .links-module 右边缘
+   离视口只剩 .main 的 24px 内边距，而操作条要 3px 间隙 + 自身宽度（1 颗按钮 48 / 
+   4 颗 122），于是右半截会被 .main 的 overflow-x:hidden 沿着视口右缘截掉。
+   判定与切换在 JS 里做（updateNavButtons 量完真实几何后挂类），
+   一旦挂上就退回 v1.5.3 的"导航条让出右内边距"方案，并且不需要悬停桥
+   （操作条已经贴回导航条右端，中间没有空隙了）。 */
+.links-module.side-inside .nav-side { right: 0; }
+.links-module.side-inside .tab-nav { padding-right: calc(6px + var(--nav-side-w, 0px)); }
+.links-module.side-inside .panel-head::after { display: none; }
+
+.tab-nav {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 18px;
+}
+.tab-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  /* 分类超出后可平滑滚动 */
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  padding: 1px;
+}
+.tab-list::-webkit-scrollbar { display: none; }
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: grab;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.tab-item:active { cursor: grabbing; }
+/* 悬浮/选中都不再用实色填充，统一走玻璃胶囊（见文件上方共用规则） */
+.tab-item.active { font-weight: 600; }
+.tab-item .tab-emoji { font-size: 15px; line-height: 1; }
+.tab-item .tab-emoji img { width: 16px; height: 16px; object-fit: cover; border-radius: 4px; display: block; }
+.tab-item.dragging { opacity: .45; cursor: grabbing; }
+.tab-item.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding-left: 7px;
+  margin-left: 2px;
+  border-left: 1px solid var(--glass-border);
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+/* 悬浮走玻璃胶囊（见文件上方共用规则），这里只补文字色 */
+.icon-btn:hover { color: var(--fg); }
+.icon-btn:active { transform: scale(.93); }
+.icon-btn svg { width: 17px; height: 17px; fill: currentColor; }
+.icon-btn.hidden { display: none; }
+
+/* ===== 面板级操作条：上移 / 下移 / 新增面板 / 删除此面板 =====
+   挂在导航条【外面】右侧 3px：right 取 -(自身宽度 + 3px)，于是左边缘正好落在
+   导航条右边缘再往右 3px，两者之间留 3px 间隙（这段间隙由 .panel-head::after
+   的悬停桥覆盖，指针从导航条滑过去 hover 不会中断）。
+   CSS 里没法用"自身宽度"参与 right 计算，所以宽度由 JS 量一次写进 --nav-side-w
+   （见 updateNavButtons）。
+
+   top/bottom:0 → 高度恒等于导航条；绝对定位 → **不占布局宽度**，
+   因此 .tab-nav 宽度恒等于 .links-module 宽度，右边缘与下方链接网格严格对齐。
+   与导航条同一套玻璃样式（HTML 上带 .glass，并挂进折射引擎）。
+   平时透明，悬停整条 .panel-head（含 ::after 桥与自身）时淡入；focus-within 也放行
+   （键盘 Tab 进来时不能是隐形的）。 */
+.nav-side {
+  position: absolute;
+  top: 0;
+  right: calc(-1 * (var(--nav-side-w, 0px) + 3px));
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px;
+  border-radius: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+.panel-head:hover .nav-side,
+.nav-side:focus-within { opacity: 1; pointer-events: auto; }
+.nav-side .icon-btn { color: var(--fg-2); }
+.nav-side .icon-btn:hover,
+.nav-side .icon-btn:focus-visible { color: var(--fg); }
+
+.links-grid {
+  display: grid;
+  /* 列宽自适应：最小 --btn-w，剩余空间均分；--btn-w 可在设置里自定义 */
+  grid-template-columns: repeat(auto-fill, minmax(var(--btn-w), 1fr));
+  gap: var(--btn-gap);
+  align-content: start;
+  min-height: 60px;
+}
+
+.link-btn {
+  position: relative;
+  width: 100%;
+  height: var(--btn-h);
+  border-radius: var(--btn-r);
+  display: flex;
+  /* 经典排布：左侧图片 + 右侧名称 */
+  flex-direction: row;
+  align-items: center;
+  justify-content: var(--btn-align);
+  gap: 8px;
+  padding: 0 12px;
+  text-decoration: none;
+  color: var(--fg);
+  cursor: pointer;
+  /* 保持默认样式：无悬浮位移 / 无缩放 */
+  transition: border-color .24s ease;
+}
+.link-btn.dragging { opacity: .35; cursor: grabbing; }
+.link-btn.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.link-icon {
+  width: calc(var(--btn-h) * .44);
+  height: calc(var(--btn-h) * .44);
+  min-width: 20px;
+  min-height: 20px;
+  max-width: 38px;
+  max-height: 38px;
+  border-radius: var(--icon-r);
+  background: rgba(255, 255, 255, .14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-size: calc(var(--btn-h) * .26);
+  font-weight: 700;
+  /* 无 favicon 时的首字母回退，跟名称用同一个自动色 */
+  color: var(--link-fg, var(--fg));
+  transition: border-radius .2s ease;
+}
+.link-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.link-icon .fallback { display: flex; align-items: center; justify-content: center; }
+
+.link-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 300;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* 名称颜色由 JS 按该按钮自身底色的合成亮度逐个数决定（--link-fg），
+     没有该变量时回退到主题前景色。不再用 opacity 压淡——那会实打实降低对比度 */
+  color: var(--link-fg, var(--fg));
+}
+
+.link-actions {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+/* 只淡入，不做位移动画 */
+.link-btn:hover .link-actions { opacity: 1; pointer-events: auto; }
+.mini-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: rgba(10, 12, 20, .55);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .18s ease, transform .18s ease;
+}
+.mini-btn:hover { background: rgba(10, 12, 20, .82); }
+/* 链接按钮右上角只剩「修改」一颗（删除已收进「修改链接」弹窗的右上角） */
+.mini-btn svg { width: 12px; height: 12px; fill: currentColor; }
+
+/* ===== 拖动代理 =====
+   原生 HTML5 拖拽只肯给一张"拖起那一瞬间"的位图当幽灵：之后无论你怎么移动，
+   那张位图里冻着的都是【出发点】的背景，玻璃看起来像被连背景一起搬走了。
+   所以拖动时把原生幽灵换成这个跟着指针走的真实克隆体，并把它挂进折射引擎，
+   拖动期间逐帧重算 —— 它就会一直显示"此刻压在它下面的背景"。
+
+   pointer-events:none 是必须的：否则它会成为指针下方最上层的元素，
+   把 dragover/drop 的 e.target 抢走，落点判断就全错了。 */
+.drag-proxy {
+  position: fixed;
+  z-index: 900;
+  pointer-events: none;
+  opacity: .92;
+  margin: 0;
+}
+
+.empty-links {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 28px;
+  color: var(--fg-3);
+  font-size: 13.5px;
+}
+
+/* 滚动条隐藏（设置面板内保留细滚动条） */
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

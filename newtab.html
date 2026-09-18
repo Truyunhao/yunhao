@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<!-- booting：设置与壁纸应用完成前先不绘制，避免"先默认后存档"重新生成画面的割裂感。
+     JS 在首帧应用完设置后由 finishInit 移除。 -->
+<html lang="zh-CN" class="booting">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新标签页</title>
+<link rel="stylesheet" href="css/newtab.css">
+<link rel="stylesheet" href="css/settings.css">
+</head>
+<!-- data-theme 与 class 同步由 app.js 的 applyContrast() 维护；
+     首帧先按默认主题（液态玻璃）给值，避免设置面板第一帧用错材质。 -->
+<body class="ui-dark" data-theme="liquid">
+
+<!-- 背景层 -->
+<div class="bg-layer" id="bgLayer"></div>
+<!-- 动态壁纸层：叠在静态背景之上、暗角之下。
+     选中动态壁纸时给 .on 显示；muted + loop + playsinline 才能自动循环播放。
+     静态底图不隐藏 —— 视频加载那一两帧前它当海报用，避免闪一下渐变底。 -->
+<video class="bg-video" id="bgVideo" muted loop playsinline preload="auto" aria-hidden="true"></video>
+<div class="bg-vignette" id="bgVignette"></div>
+
+<!-- 设置按钮（右上角） -->
+<button class="settings-btn glass" id="settingsBtn" title="设置" aria-label="设置">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.43-2.53a7.63 7.63 0 0 0 0-1.94l2.05-1.6a.5.5 0 0 0 .12-.64l-1.94-3.36a.5.5 0 0 0-.6-.22l-2.42.97a7.66 7.66 0 0 0-1.68-.97l-.37-2.57a.5.5 0 0 0-.49-.42h-3.88a.5.5 0 0 0-.5.42l-.36 2.57c-.6.24-1.16.56-1.68.97l-2.42-.97a.5.5 0 0 0-.6.22L2.4 9.79a.5.5 0 0 0 .12.64l2.05 1.6a7.63 7.63 0 0 0 0 1.94l-2.05 1.6a.5.5 0 0 0-.12.64l1.94 3.36c.13.22.4.31.6.22l2.42-.97c.52.41 1.08.73 1.68.97l.37 2.57c.04.24.25.42.49.42h3.88c.24 0 .45-.18.5-.42l.36-2.57a7.66 7.66 0 0 0 1.68-.97l2.42.97c.2.09.47 0 .6-.22l1.94-3.36a.5.5 0 0 0-.12-.64l-2.05-1.6z"/>
+  </svg>
+</button>
+
+<!-- 主容器 -->
+<main class="main" id="main">
+
+  <!-- 时间模块 -->
+  <section class="time-module" id="timeModule">
+    <div class="time-display" id="timeDisplay">00:00</div>
+    <div class="time-date" id="timeDate"></div>
+  </section>
+
+  <!-- 搜索模块 -->
+  <section class="search-module" id="searchModule">
+    <div class="search-box glass" id="searchBox">
+      <span class="search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+      </span>
+      <input type="text" class="search-input" id="searchInput" autocomplete="off" spellcheck="false" aria-label="搜索">
+      <div class="engine-switcher" id="engineSwitcher" role="group" aria-label="搜索引擎">
+        <!-- 文字包一层 <span>：.engine-btn 的折射层是绝对定位子元素，
+             裸文本节点没法 position/z-index，会被折射层盖住 -->
+        <button class="engine-btn" data-engine="baidu" title="百度"><span>百度</span></button>
+        <button class="engine-btn" data-engine="bing" title="必应"><span>必应</span></button>
+        <button class="engine-btn" data-engine="google" title="Google"><span>Google</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 链接按钮面板：每个面板是一个 <section class="links-module">，由 JS 生成，可上下堆叠多个 -->
+  <div class="panels" id="panels"></div>
+
+</main>
+
+<!-- ===== 设置面板 =====
+     关闭态用 inert 而不是 aria-hidden：面板是靠 opacity 隐去的，DOM 一直在，
+     用 aria-hidden 时里面的按钮仍然可被 Tab 聚焦，浏览器会报
+     "Blocked aria-hidden on an element because its descendant retained focus"
+     （关闭瞬间焦点还停在 #settingsClose 上）。inert 一次解决两件事：
+     既把整棵子树从无障碍树里摘掉，又让它彻底不可聚焦。 -->
+<div class="settings-overlay" id="settingsOverlay" inert>
+  <div class="settings-panel" id="settingsPanel" data-page="settings">
+
+    <!-- 页面一：设置 -->
+    <section class="page page-settings" id="pageSettings">
+      <header class="page-head">
+        <h2>设置</h2>
+        <button class="icon-btn" id="settingsClose" title="关闭">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </header>
+
+      <div class="page-body">
+
+        <div class="card">
+          <h3>壁纸</h3>
+          <div class="wallpaper-layout">
+            <!-- 「未设置壁纸」用独立 <span> 承载：选中动态壁纸时这里会挂一个 <video>，
+                 不能再靠 textContent 整体清空（那会把视频一起删掉） -->
+            <div class="wallpaper-preview" id="wallpaperPreview"><span class="wp-empty">未设置壁纸</span></div>
+            <div class="wallpaper-actions">
+              <!-- 「选择壁纸」= 原来的壁纸轮播页（现在唯一的壁纸选择入口），占原来选择壁纸按钮的位置 -->
+              <button class="btn primary" id="openCarousel">选择壁纸</button>
+              <button class="btn" id="removeWallpaper">移除壁纸</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>主题</h3>
+          <div class="theme-grid" id="themeGrid">
+            <button class="theme-option" data-theme="liquid">
+              <span class="swatch swatch-liquid"></span><span>液态玻璃</span>
+            </button>
+            <button class="theme-option" data-theme="light">
+              <span class="swatch swatch-light"></span><span>浅色</span>
+            </button>
+            <button class="theme-option" data-theme="dark">
+              <span class="swatch swatch-dark"></span><span>深色</span>
+            </button>
+            <button class="theme-option" data-theme="system">
+              <span class="swatch swatch-system"></span><span>跟随系统</span>
+            </button>
+          </div>
+          <div class="row">
+            <label for="showGlint">高光显示</label>
+            <div class="ctrl end">
+              <button class="switch" id="showGlint" role="switch" aria-checked="true" title="分类标签与搜索引擎的高光描边"></button>
+            </div>
+          </div>
+          <button class="btn wide accent" id="openLiquidPage">
+            <svg viewBox="0 0 24 24"><path d="M12 2c-3.5 4.2-6 7.4-6 10.5A6 6 0 0 0 18 12.5C18 9.4 15.5 6.2 12 2zm0 16a3.5 3.5 0 0 1-3.5-3.5c0-.62.2-1.3.55-2.05.9 1.1 1.95 1.75 2.95 1.75s2.05-.65 2.95-1.75c.35.75.55 1.43.55 2.05A3.5 3.5 0 0 1 12 18z"/></svg>
+            设置液态玻璃效果
+          </button>
+        </div>
+
+        <div class="card">
+          <h3>时间</h3>
+          <div class="row">
+            <label for="toggleTime">显示时间</label>
+            <div class="ctrl end"><button class="switch" id="toggleTime" role="switch" aria-checked="true"></button></div>
+          </div>
+          <div class="row">
+            <label for="showSeconds">显示秒</label>
+            <div class="ctrl end"><button class="switch" id="showSeconds" role="switch" aria-checked="false"></button></div>
+          </div>
+          <div class="row">
+            <label for="timeFont">字体样式</label>
+            <div class="ctrl">
+              <select class="select" id="timeFont">
+                <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">系统默认</option>
+                <option value="'Segoe UI Variable Display', 'Segoe UI', 'PingFang SC', sans-serif">Segoe 现代无衬线</option>
+                <option value="Georgia, 'Times New Roman', serif">Georgia 衬线</option>
+                <option value="'Palatino Linotype', Palatino, 'Songti SC', serif">Palatino 古典衬线</option>
+                <option value="'Courier New', Consolas, monospace">Courier 等宽</option>
+                <option value="Consolas, 'SF Mono', Menlo, monospace">Consolas 编程等宽</option>
+                <option value="Impact, Haettenschweiler, 'Arial Black', sans-serif">Impact 粗黑</option>
+                <option value="'Trebuchet MS', 'Gill Sans', sans-serif">Trebuchet</option>
+                <option value="'Bahnschrift', 'DIN Alternate', 'Arial Narrow', sans-serif">Bahnschrift 窄体</option>
+                <option value="'Microsoft YaHei', 'PingFang SC', sans-serif">微软雅黑</option>
+                <option value="'Songti SC', 'SimSun', serif">宋体</option>
+                <option value="'KaiTi', 'STKaiti', serif">楷体</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <label for="timeSize">字体大小</label>
+            <div class="ctrl">
+              <input type="range" id="timeSize" min="40" max="220" step="2">
+              <span class="val" id="timeSizeVal">96</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="timeWeight">字体粗细</label>
+            <div class="ctrl">
+              <input type="range" id="timeWeight" min="100" max="900" step="100">
+              <span class="val" id="timeWeightVal">700</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="timeLetter">字间距</label>
+            <div class="ctrl">
+              <input type="range" id="timeLetter" min="-8" max="20" step="1">
+              <span class="val" id="timeLetterVal">0</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="autoTimeColor">字体颜色</label>
+            <div class="ctrl end">
+              <input type="color" id="timeColor" value="#ffffff" title="自定义颜色">
+              <button class="switch" id="autoTimeColor" role="switch" aria-checked="true" title="自动适配背景对比度"></button>
+              <span class="hint">自动适配</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="timeTop">顶部距时间模块</label>
+            <div class="ctrl">
+              <input type="range" id="timeTop" min="0" max="70" step="1">
+              <span class="val" id="timeTopVal">9vh</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="searchTop">时间模块距搜索模块</label>
+            <div class="ctrl">
+              <input type="range" id="searchTop" min="0" max="70" step="1">
+              <span class="val" id="searchTopVal">6vh</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="linksTop">搜索模块距链接模块</label>
+            <div class="ctrl">
+              <input type="range" id="linksTop" min="0" max="70" step="1">
+              <span class="val" id="linksTopVal">9vh</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>链接按钮</h3>
+          <div class="row">
+            <label for="linksWidth">区域宽度</label>
+            <div class="ctrl">
+              <input type="range" id="linksWidth" min="1000" max="2400" step="20">
+              <span class="val" id="linksWidthVal">1200</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="btnWidth">按钮宽度</label>
+            <div class="ctrl">
+              <input type="range" id="btnWidth" min="100" max="320" step="2">
+              <span class="val" id="btnWidthVal">126</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="btnHeight">按钮高度</label>
+            <div class="ctrl">
+              <input type="range" id="btnHeight" min="40" max="180" step="2">
+              <span class="val" id="btnHeightVal">50</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="btnRadius">按钮圆角</label>
+            <div class="ctrl">
+              <input type="range" id="btnRadius" min="0" max="50" step="1">
+              <span class="val" id="btnRadiusVal">10</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="iconRadius">图片圆角</label>
+            <div class="ctrl">
+              <input type="range" id="iconRadius" min="0" max="50" step="1">
+              <span class="val" id="iconRadiusVal">50%</span>
+            </div>
+          </div>
+          <div class="row">
+            <label for="btnGap">按钮间距</label>
+            <div class="ctrl">
+              <input type="range" id="btnGap" min="0" max="48" step="1">
+              <span class="val" id="btnGapVal">14</span>
+            </div>
+          </div>
+          <div class="row">
+            <label>按钮内容</label>
+            <div class="ctrl end">
+              <div class="seg" id="btnAlign" role="group" aria-label="按钮内容对齐">
+                <button type="button" class="seg-btn" data-align="left">靠左</button>
+                <button type="button" class="seg-btn" data-align="center">居中</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>数据管理</h3>
+          <div class="btn-row">
+            <button class="btn" id="exportData">导出数据</button>
+            <button class="btn" id="importData">导入数据</button>
+            <button class="btn danger" id="resetData">恢复默认</button>
+          </div>
+          <input type="file" class="file-input" id="importFile" accept=".json,application/json">
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 页面二：液态玻璃效果（覆盖设置页面） -->
+    <section class="page page-liquid" id="pageLiquid">
+      <header class="page-head">
+        <button class="icon-btn" id="liquidBack" title="返回设置">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <h2>设置液态玻璃效果</h2>
+        <button class="icon-btn" id="liquidClose" title="关闭">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </header>
+
+      <div class="page-body">
+
+        <div class="card">
+          <h3>预设</h3>
+          <div class="preset-row">
+            <button class="chip" data-preset="soft">简单玻璃</button>
+            <button class="chip" data-preset="thick">厚玻璃</button>
+            <button class="chip" data-preset="frosted">磨砂玻璃</button>
+            <button class="chip" data-preset="cut">切割玻璃</button>
+            <button class="chip" data-preset="plexi">橙色有机玻璃</button>
+            <button class="chip" data-preset="clear">纯净通透</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>折射</h3>
+          <div class="row">
+            <label>边缘折射</label>
+            <div class="ctrl end"><button class="switch" id="lpRefract" role="switch" aria-checked="true"></button></div>
+          </div>
+          <div class="row">
+            <label for="lpDepth">折射深度</label>
+            <div class="ctrl"><input type="range" id="lpDepth" min="0" max="120" step="1"><span class="val" id="lpDepthVal">60</span></div>
+          </div>
+          <div class="row">
+            <label for="lpSplay">棱边宽度</label>
+            <div class="ctrl"><input type="range" id="lpSplay" min="2" max="40" step="1"><span class="val" id="lpSplayVal">2</span></div>
+          </div>
+          <div class="row">
+            <label for="lpFeather">柔化</label>
+            <div class="ctrl"><input type="range" id="lpFeather" min="0" max="40" step="1"><span class="val" id="lpFeatherVal">24</span></div>
+          </div>
+          <div class="row">
+            <label for="lpCurve">曲率</label>
+            <div class="ctrl"><input type="range" id="lpCurve" min="0.3" max="3" step="0.1"><span class="val" id="lpCurveVal">2</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>表面</h3>
+          <div class="row">
+            <label for="lpBlur">模糊</label>
+            <div class="ctrl"><input type="range" id="lpBlur" min="0" max="8" step="0.1"><span class="val" id="lpBlurVal">0</span></div>
+          </div>
+          <div class="row">
+            <label for="lpChroma">色散</label>
+            <div class="ctrl"><input type="range" id="lpChroma" min="0" max="0.25" step="0.01"><span class="val" id="lpChromaVal">0</span></div>
+          </div>
+          <div class="row">
+            <label for="lpGlint">高光</label>
+            <div class="ctrl"><input type="range" id="lpGlint" min="0" max="150" step="5"><span class="val" id="lpGlintVal">25</span></div>
+          </div>
+          <div class="row">
+            <label for="lpAlpha">玻璃通透度</label>
+            <div class="ctrl"><input type="range" id="lpAlpha" min="0" max="60" step="1"><span class="val" id="lpAlphaVal">10</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>颜色</h3>
+          <div class="row">
+            <label for="lpTint">染色强度</label>
+            <div class="ctrl"><input type="range" id="lpTint" min="0" max="1" step="0.01"><span class="val" id="lpTintVal">0</span></div>
+          </div>
+          <div class="row">
+            <label for="lpTintColor">染色颜色</label>
+            <div class="ctrl"><input type="color" id="lpTintColor" value="#ffffff"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 页面三：选择壁纸（与液态玻璃页同风格同宽高） -->
+    <section class="page page-carousel" id="pageCarousel">
+      <header class="page-head">
+        <button class="icon-btn" id="carouselBack" title="返回设置">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+        <h2>选择壁纸</h2>
+        <button class="icon-btn" id="carouselClose" title="关闭">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </header>
+
+      <div class="page-body">
+
+        <div class="card">
+          <div class="row">
+            <label>轮播时间</label>
+            <div class="ctrl end">
+              <div class="seg grid4" id="carouselEvery" role="group" aria-label="壁纸轮播时间">
+                <button type="button" class="seg-btn" data-every="none">无</button>
+                <button type="button" class="seg-btn" data-every="5min">5分钟</button>
+                <button type="button" class="seg-btn" data-every="15min">15分钟</button>
+                <button type="button" class="seg-btn" data-every="1h">1小时</button>
+                <button type="button" class="seg-btn" data-every="3h">3小时</button>
+                <button type="button" class="seg-btn" data-every="12h">12小时</button>
+                <button type="button" class="seg-btn" data-every="1d">1天</button>
+                <div class="seg-custom" id="carouselCustomWrap" title="自定义间隔（分）">
+                  <input type="number" id="carouselCustomMin" min="1" max="9999" step="1" inputmode="numeric" aria-label="自定义轮播间隔（分）">
+                  <span>分</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <label>轮播方式</label>
+            <div class="ctrl end">
+              <div class="seg" id="carouselMode" role="group" aria-label="壁纸轮播方式">
+                <button type="button" class="seg-btn" data-mode="random">随机</button>
+                <button type="button" class="seg-btn" data-mode="seq">顺序</button>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <label>轮播状态</label>
+            <div class="ctrl end"><span class="hint" id="carouselStatus">—</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>静态壁纸</h3>
+          <div class="carousel-grid" id="carouselGrid"></div>
+          <input type="file" class="file-input" id="carouselFile" accept="image/*" multiple>
+        </div>
+
+        <div class="card">
+          <h3>动态壁纸</h3>
+          <p class="hint">支持 mp4 / webm 等浏览器可播放的视频。选中的视频会循环播放并替代静态壁纸；液态玻璃的边缘折射会保留（用低帧率帧拷贝喂给折射层）。</p>
+          <div class="carousel-grid" id="videoGrid"></div>
+          <input type="file" class="file-input" id="videoFile" accept="video/*" multiple>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- 弹窗 / 提示 -->
+<div class="modal-mask" id="modalMask" hidden></div>
+<div class="toast" id="toast"></div>
+
+<!-- 折射滤镜容器 -->
+<svg id="filter-housing" width="0" height="0" aria-hidden="true" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+
+<!-- 默认壁纸：单独一个文件，避免 ~20k 字符的 DataURL 挤进 app.js。
+     必须在 app.js 之前加载 —— defaultData() 会读 window.LG_DEFAULT_WALLPAPER。 -->
+<script src="js/default-wallpaper.js"></script>
+<script src="js/refraction.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

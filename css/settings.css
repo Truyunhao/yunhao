@@ -1,0 +1,764 @@
+/* ==========================================================================
+   设置面板 / 液态玻璃参数页 / 弹窗 / 提示
+   ========================================================================== */
+
+/* ===== 遮罩 + 面板 ===== */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  /* 面板从右上角的设置按钮位置弹出 */
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 84px 26px 26px;
+  /* 不遮罩、不虚化：面板外的主页面要能被完整观测 */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .28s ease;
+  box-shadow: none;
+}
+.settings-overlay.open { opacity: 1; pointer-events: auto; }
+
+.settings-panel {
+  position: relative;
+  width: min(480px, calc(100vw - 52px));
+  height: min(78vh, 760px);
+  border-radius: 22px;
+  overflow: hidden;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  border: 1px solid var(--panel-border);
+  /* 材质全部走变量：light / dark 主题是一块实心面板，
+     「液态玻璃」主题则整体换成主页面那套半透玻璃（见 newtab.css 的主题材质规则）。
+     --panel-glint 在非玻璃主题下是 `0 0 #0000`，加了等于没加。 */
+  box-shadow:
+    var(--panel-shadow),
+    var(--panel-inner),
+    var(--panel-glint);
+  backdrop-filter: var(--panel-blur);
+  -webkit-backdrop-filter: var(--panel-blur);
+  /* 缩放原点对准设置按钮中心（按钮 46px，位于 top/right 26px） */
+  transform-origin: calc(100% - 23px) -35px;
+  transform: scale(.28) translateY(-6px);
+  opacity: 0;
+  transition: transform .34s cubic-bezier(.2, .92, .28, 1.06), opacity .24s ease;
+}
+.settings-overlay.open .settings-panel { transform: scale(1) translateY(0); opacity: 1; }
+/* 浅色主题下的面板投影/内高光已并入 --panel-shadow / --panel-inner（newtab.css），
+   这里不再单独覆盖 —— 三个设置页面共用同一份材质变量，改一处三页一起变。 */
+
+/* ===== 页面容器（设置页 / 液态玻璃页 / 壁纸轮播页）=====
+   用 .settings-panel[data-page] 驱动，三个页面共用同一套宽高与风格 */
+.page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  transition: transform .36s cubic-bezier(.22, .9, .28, 1), opacity .26s ease;
+}
+.page-settings { transform: translateX(-12%) scale(.97); opacity: 0; pointer-events: none; }
+.page-liquid,
+.page-carousel { transform: translateX(100%); opacity: 0; pointer-events: none; }
+
+.settings-panel[data-page="settings"] .page-settings,
+.settings-panel[data-page="liquid"] .page-liquid,
+.settings-panel[data-page="carousel"] .page-carousel {
+  transform: translateX(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 22px 12px;
+  flex-shrink: 0;
+}
+.page-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.page-head h2 + .icon-btn { margin-left: auto; }
+.page-head .icon-btn { color: var(--panel-fg-dim); }
+.page-head .icon-btn:hover { color: var(--panel-fg); background: var(--ctrl-bg); }
+
+.page-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 22px 22px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 138, 165, .38) transparent;
+}
+.page-body::-webkit-scrollbar { width: 6px; }
+.page-body::-webkit-scrollbar-track { background: transparent; }
+.page-body::-webkit-scrollbar-thumb {
+  background: rgba(128, 138, 165, .32);
+  border-radius: 3px;
+}
+.page-body::-webkit-scrollbar-thumb:hover { background: rgba(128, 138, 165, .55); }
+
+/* ===== 卡片 / 分组 ===== */
+.card {
+  padding: 16px 16px 18px;
+  margin-bottom: 12px;
+  border-radius: 18px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+}
+.card:last-child { margin-bottom: 0; }
+.card > h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--panel-fg-dim);
+}
+
+/* ===== 设置行 ===== */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  margin-top: 11px;
+}
+.row > label {
+  flex: 0 0 116px;
+  font-size: 13px;
+  color: var(--panel-fg);
+  opacity: .92;
+}
+.row .ctrl {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 420px;
+}
+.row .ctrl.end { justify-content: flex-end; max-width: none; }
+.row .val {
+  flex: 0 0 52px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--panel-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.row .hint { font-size: 12px; color: var(--panel-fg-dim); white-space: nowrap; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 80px;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ctrl-border);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, .18);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .28);
+  transition: transform .15s ease;
+}
+/* 悬浮不改滑块位置/大小，只有按下时的反馈 */
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); background: var(--accent); }
+
+input[type="color"] {
+  width: 42px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }
+
+.select {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  color: var(--panel-fg);
+  font-family: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  outline: none;
+}
+.select:focus { border-color: var(--accent); }
+.select option { background: #1b1e27; color: #eee; }
+body.ui-light .select option { background: #fff; color: #222; }
+
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  color: var(--panel-fg);
+  font-family: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+.text-input:focus { border-color: var(--accent); }
+
+/* 开关 */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--switch-off);
+  cursor: pointer;
+  transition: background .25s ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .3);
+  transition: transform .26s cubic-bezier(.2, .9, .3, 1.2);
+}
+.switch.on { background: var(--accent); }
+.switch.on::after { transform: translateX(20px); }
+
+/* 分段选择（内容对齐 / 轮播间隔等） */
+.seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+}
+/* 6 项以上用网格，避免挤成一团 */
+.seg.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  width: 100%;
+}
+/* 轮播时间：无 / 5分钟 / 15分钟 / 1小时 / 3小时 / 12小时 / 1天 / 自定义 = 8 格，4 列刚好两行 */
+.seg.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  width: 100%;
+}
+/* 自定义间隔（分钟）：外观与 .seg-btn 一致，选中时为 accent 底 */
+.seg-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 6px;
+  border-radius: 7px;
+  color: var(--panel-fg-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background .2s ease, color .2s ease;
+}
+.seg-custom.active { background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); }
+.seg-custom input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.seg-custom input::-webkit-outer-spin-button,
+.seg-custom input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.seg-custom input::placeholder { color: inherit; opacity: .5; }
+.seg-btn {
+  flex: 1 1 auto;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--panel-fg-dim);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+.seg-btn:hover { color: var(--panel-fg); }
+.seg-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+}
+
+/* 按钮 */
+.btn {
+  padding: 10px 18px;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 11px;
+  background: var(--ctrl-bg);
+  color: var(--panel-fg);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, transform .2s ease, color .2s ease;
+}
+/* 悬浮只改颜色/背景，不做位移或缩放 —— 任何"改变位置"的 hover 都去掉 */
+.btn:hover { background: var(--hover-bg); }
+.btn:active { transform: translateY(0) scale(.985); }
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.primary:hover { background: var(--accent); filter: brightness(1.08); }
+.btn.danger { color: #ff7c72; border-color: rgba(255, 124, 114, .35); background: rgba(255, 90, 80, .10); }
+.btn.danger:hover { background: rgba(255, 90, 80, .20); }
+/* 小号按钮：弹窗标题右侧那一颗（「删除链接」）用，避免把标题行撑高 */
+.btn.sm { padding: 6px 12px; font-size: 12.5px; border-radius: 9px; }
+.btn.wide {
+  width: 100%;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn.wide svg { width: 16px; height: 16px; fill: currentColor; }
+.btn.accent { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.btn.accent:hover { background: var(--accent); color: #fff; border-color: transparent; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; justify-content: space-between; }
+.file-input { display: none; }
+
+/* 壁纸：左侧 16:9 预览，右侧竖排按钮 */
+.wallpaper-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 10px;
+}
+.wallpaper-preview {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  /* 无边框（按要求删除）：靠底色与圆角区分出预览区 */
+  background-color: var(--ctrl-bg);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--panel-fg-dim);
+}
+.wallpaper-actions {
+  flex: 0 0 104px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wallpaper-actions .btn {
+  width: 100%;
+  padding: 10px 8px;
+  font-size: 12.5px;
+}
+/* 选中动态壁纸时，预览框里嵌一个循环播放的 <video>（与页面背景共用同一个 Blob URL）。
+   绝对定位铺满 + 圆角继承，于是"设置页下的壁纸区域也在循环播放"，
+   且形状/裁切与页面背景完全一致（都是 object-fit: cover）。 */
+.wallpaper-preview .wp-empty { font-size: 12px; color: var(--panel-fg-dim); }
+.wallpaper-preview video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* 壁纸轮播：一行三个，16:9 */
+.carousel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.carousel-item {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 10px;
+  background-color: var(--ctrl-bg);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.carousel-item:hover { border-color: var(--accent); }
+.carousel-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.carousel-item .ci-tag {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(8, 10, 16, .62);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: .02em;
+  backdrop-filter: blur(4px);
+}
+.carousel-item .ci-del {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(8, 10, 16, .62);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity .18s ease, background .18s ease;
+}
+.carousel-item:hover .ci-del { opacity: 1; }
+.carousel-item .ci-del:hover { background: #e2483d; }
+.carousel-item .ci-del svg { width: 11px; height: 11px; fill: currentColor; }
+.carousel-item.add {
+  border-style: dashed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--panel-fg-dim);
+  font-size: 12px;
+  gap: 5px;
+}
+.carousel-item.add:hover { color: var(--accent); background: var(--accent-soft); }
+.carousel-item.add svg { width: 18px; height: 18px; fill: currentColor; }
+.carousel-empty {
+  grid-column: 1 / -1;
+  padding: 14px 4px 6px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--panel-fg-dim);
+}
+
+/* 动态壁纸缩略图：沿用 .carousel-item 的全部外观（同一个类），只多一个"可播放"角标。
+   缩略图用导入时抓到的首帧 poster，不摆真的 <video> —— 一屏十几个 <video>
+   会同时解码，又卡又费电。 */
+.video-item .vi-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(8, 10, 16, .5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.video-item .vi-play svg { width: 11px; height: 11px; fill: #fff; margin-left: 1px; }
+/* 使用中的动态壁纸：角标染成 accent，"使用中"三个字就不必再挤在缩略图上了 */
+.video-item.active .vi-play { background: var(--accent); }
+/* 「使用中」角标挪到左上角：左下角留给时长（.ci-tag 的默认位置），免得两个标签叠一起 */
+.video-item .ci-tag.in-use { bottom: auto; top: 5px; }
+
+/* 卡片里的说明文字（动态壁纸那块用） */
+.card > .hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--panel-fg-dim);
+}
+
+/* 主题选择 */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 8px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  color: var(--panel-fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.theme-option:hover { border-color: var(--accent); }
+.theme-option.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(108, 140, 255, .22);
+}
+.swatch {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+  /* 无边框（按要求删除）：四块色板就靠渐变本身区分 */
+}
+.swatch-liquid {
+  background:
+    radial-gradient(circle at 72% 26%, rgba(255,255,255,.9), rgba(255,255,255,0) 42%),
+    linear-gradient(135deg, #4c6ff0, #22c9e8 55%, #7b5cf0);
+}
+.swatch-light { background: linear-gradient(135deg, #ffffff, #dfe6f5); }
+.swatch-dark  { background: linear-gradient(135deg, #1b1e2b, #0a0c12); }
+.swatch-system {
+  background: linear-gradient(90deg, #eef2fa 0 50%, #14161f 50% 100%);
+}
+
+/* 预设 */
+.preset-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+.chip {
+  padding: 9px 15px;
+  border-radius: 10px;
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  color: var(--panel-fg);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.chip:active { transform: translateY(0) scale(.97); }
+
+/* ===== 弹窗 ===== */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* 遮罩也跟着主题：浅色主题下不该还是一层黑纱（见 newtab.css 的 --mask-bg） */
+  background: var(--mask-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.modal-mask.show { opacity: 1; }
+.modal-mask[hidden] { display: none; }
+.modal {
+  width: min(430px, 94vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border-radius: 20px;
+  /* 表单行：label 宽 74px + 行内 gap 12px。抽成变量供 .icon-editor 对齐使用 */
+  --field-label-w: 74px;
+  --row-gap: 12px;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  border: 1px solid var(--panel-border);
+  /* 弹窗不带投影（按要求删除）：靠 --mask-bg 遮罩把背景压暗来区分层次 */
+  transform: scale(.94) translateY(10px);
+  transition: transform .26s cubic-bezier(.2, .9, .3, 1.1);
+}
+.modal-mask.show .modal { transform: scale(1) translateY(0); }
+/* 标题行：标题在左，可选的动作按钮（如「删除链接」）在右。
+   align-items:flex-start —— 需求要求那颗按钮与标题【顶部对齐】。 */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.modal h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+/* 标题行里的按钮不要被 flex 压扁，也不跟着拉伸 */
+.modal-head > .btn { flex: 0 0 auto; }
+.modal .row { margin-top: 12px; }
+/* label 宽度与行间距抽成变量：下面的 .icon-editor 要靠它对齐输入框左边缘 */
+.modal .row > label { flex: 0 0 var(--field-label-w); font-size: 13px; }
+.modal .row .ctrl { max-width: none; }
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+.emoji-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.emoji-pick {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all .18s ease;
+}
+.emoji-pick:hover { border-color: var(--accent); }
+
+/* 图标编辑：与上面的 .row 同构的两列 ——
+   左列宽 = label 列宽，右列从输入框左边缘开始（「上传图片」因此仍与上方输入框左对齐）。
+   预览是正方形，边长与右侧「上传图片」按钮的高度**共用同一个变量** --icon-box，
+   于是「宽 = 高 = 按钮高度」这条关系由 CSS 自己保证（改一个值两边同时变）；
+   align-items:center → 两者落在同一水平中轴上。 */
+.icon-editor {
+  --icon-box: 30px;
+  display: grid;
+  grid-template-columns: var(--field-label-w) 1fr;
+  align-items: center;
+  gap: var(--row-gap);
+  margin-top: 12px;
+}
+/* 圆角直接沿用设置里的「图片圆角」(--icon-r，applySettings 注入)：50% 即正圆，
+   所以预览和页面上真实按钮的图标形状永远一致。
+   justify-self:start 让它压在 label 那一列的最左边（与「名称 / 网址」左对齐）。 */
+.icon-preview {
+  justify-self: start;
+  width: var(--icon-box);
+  height: var(--icon-box);
+  border-radius: var(--icon-r, 50%);
+  border: 1px solid var(--ctrl-border);
+  background: var(--ctrl-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  transition: border-radius .2s ease;
+}
+.icon-preview img { width: 100%; height: 100%; object-fit: cover; }
+.icon-editor .stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+.icon-editor .mini-row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 高度写死成 --icon-box：与左侧预览方块严格等高 */
+.icon-editor .btn {
+  height: var(--icon-box);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+/* ===== 轻提示 ===== */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  z-index: 900;
+  padding: 12px 22px;
+  border-radius: 14px;
+  background: var(--panel-bg);
+  color: var(--panel-fg);
+  border: 1px solid var(--panel-border);
+  font-size: 13px;
+  box-shadow: var(--toast-shadow);
+  opacity: 0;
+  transform: translateX(-50%) translateY(24px);
+  pointer-events: none;
+  transition: opacity .28s ease, transform .34s cubic-bezier(.2, .9, .3, 1.1);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== 小屏适配 ===== */
+@media (max-width: 820px) {
+  .theme-grid { grid-template-columns: repeat(2, 1fr); }
+  .row > label { flex-basis: 96px; font-size: 12.5px; }
+  .row { gap: 10px; }
+  /* 弹窗内 label 宽度不受上面这条影响（.modal .row > label 优先级更高），
+     但行内 gap 变了，.icon-editor 的两列间距要跟着改，否则右列会错位 2px */
+  .modal { --row-gap: 10px; }
+  .settings-btn { top: 16px; right: 16px; width: 42px; height: 42px; }
+  .settings-overlay { padding: 68px 16px 16px; }
+  .settings-panel {
+    transform-origin: calc(100% - 21px) -31px;
+    height: min(80vh, 700px);
+  }
+  .engine-btn { padding: 5px 9px; font-size: 11.5px; }
+  .search-box { padding-left: 14px; }
+  .wallpaper-layout { flex-direction: column; }
+  .wallpaper-actions { flex: 0 0 auto; flex-direction: row; width: 100%; }
+  .wallpaper-preview { width: 100%; }
+}
